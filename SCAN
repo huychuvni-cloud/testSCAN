@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Quét Mã</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            margin: 0;
+            background-color: #f0f2f5;
+            font-family: -apple-system, BlinkMacMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #333;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 90%;
+            max-width: 600px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            background-color: #fff;
+            box-sizing: border-box;
+            text-align: center;
+            position: relative;
+        }
+        h1 {
+            color: #4a90e2;
+            margin-bottom: 20px;
+        }
+        .intro-container h1 {
+            font-size: 2.5em;
+            margin-bottom: 30px;
+        }
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+        }
+        .scan-button {
+            padding: 15px 25px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #4a90e2, #50c9c3);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .scan-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        .scanner-container, .result-container, .history-container {
+            display: none;
+            width: 100%;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            overflow: hidden;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        canvas {
+            display: none;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            width: 100%;
+            background-color: #e9f5ff;
+            border: 1px solid #bce0fd;
+            border-radius: 8px;
+            font-size: 1.1em;
+            text-align: center;
+            word-wrap: break-word;
+        }
+        .controls-top {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 10;
+        }
+        .controls-bottom {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .control-button {
+            background-color: rgba(0, 0, 0, 0.5);
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            color: #fff;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .control-button:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        .small-button {
+            background-color: rgba(0, 0, 0, 0.5);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            color: #fff;
+            font-size: 1em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .small-button:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        .result-info {
+            width: 100%;
+            text-align: left;
+            margin-top: 20px;
+        }
+        .result-info div {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .result-info div:last-child {
+            border-bottom: none;
+        }
+        .result-info span {
+            font-weight: bold;
+        }
+        .action-buttons {
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            margin-top: 20px;
+            width: 100%;
+            justify-content: center;
+        }
+        .action-button {
+            padding: 12px 20px;
+            font-size: 1em;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #4a90e2, #50c9c3);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            flex-grow: 1;
+        }
+        .share-menu {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            padding: 10px;
+            display: none;
+            z-index: 20;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .share-menu-button {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            font-size: 1em;
+            font-weight: bold;
+            color: #333;
+            background-color: #eee;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .share-menu-button:hover {
+            background-color: #ddd;
+        }
+        .share-menu-button img {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+        }
+
+        .history-list {
+            width: 100%;
+            text-align: left;
+            margin-top: 20px;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+        .history-item {
+            background-color: #e9f5ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #bce0fd;
+        }
+        .history-item p {
+            margin: 0;
+            word-wrap: break-word;
+        }
+        .history-item .timestamp {
+            font-size: 0.8em;
+            color: #777;
+            margin-top: 5px;
+        }
+
+        /* Thêm CSS mới cho khung quét */
+        .mrz-scan-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 90%;
+            max-width: 500px;
+            height: 80px;
+            transform: translate(-50%, -50%);
+            border: 4px solid rgba(74, 144, 226, 0.7); /* Màu xanh */
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container intro-container">
+        <h1>Chào mừng bạn đến với Ứng dụng Quét</h1>
+        <p>Chọn loại tài liệu bạn muốn quét:</p>
+        <div class="button-group">
+            <button class="scan-button" onclick="startScanner('qr')">Quét CCCD (QR Code)</button>
+            <button class="scan-button" onclick="startScanner('mrz')">Quét Hộ chiếu (MRZ)</button>
+        </div>
+    </div>
+
+    <div class="container scanner-container">
+        <h1>Máy Quét</h1>
+        <div class="video-container">
+            <div class="controls-top">
+                <button class="small-button" onclick="goBack()">&#8592;</button>
+                <button class="small-button" onclick="stopScanner()">&#10006;</button>
+            </div>
+            <video id="video" playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div id="mrz-frame" class="mrz-scan-frame" style="display:none;"></div>
+        </div>
+        <div id="output">Đang chờ...</div>
+        <div class="controls-bottom">
+            <button class="control-button" onclick="toggleFlash('off')">Off</button>
+            <button class="control-button" onclick="toggleFlash('on')">On</button>
+            <button class="control-button" onclick="toggleFlash('auto')">Auto</button>
+        </div>
+    </div>
+
+    <div class="container result-container">
+        <h1>Thông tin đã quét</h1>
+        <div class="result-info" id="result-info"></div>
+        <div class="action-buttons">
+            <button class="action-button" onclick="toggleShareMenu()">Chia sẻ</button>
+            <button class="action-button" onclick="takeScreenshot()">Chụp màn hình</button>
+            <button class="action-button" onclick="goToHistoryAndSave()">Xác nhận</button>
+        </div>
+        <div class="button-group" style="margin-top: 20px;">
+            <button class="scan-button" onclick="resetApp()">Quét lại</button>
+        </div>
+        <div class="share-menu" id="share-menu">
+            <a href="#" class="share-menu-button" id="share-zalo">
+                <img src="https://logodix.com/logo/1915668.png" alt="Zalo Logo"> Zalo
+            </a>
+            <a href="#" class="share-menu-button" id="share-messenger">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/b/be/Facebook_Messenger_logo_2020.svg" alt="Messenger Logo"> Messenger
+            </a>
+        </div>
+    </div>
+
+    <div class="container history-container">
+        <h1>Lịch sử quét</h1>
+        <div class="history-list" id="history-list"></div>
+        <div class="button-group" style="margin-top: 20px;">
+            <button class="scan-button" onclick="resetApp()">Quay lại màn hình chính</button>
+        </div>
+    </div>
+
+    <!-- Thư viện jsQR -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.3.1/dist/jsQR.min.js"></script>
+    <!-- Thư viện HTML2Canvas cho chức năng chụp màn hình -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script>
+        const introContainer = document.querySelector('.intro-container');
+        const scannerContainer = document.querySelector('.scanner-container');
+        const resultContainer = document.querySelector('.result-container');
+        const historyContainer = document.querySelector('.history-container');
+        const video = document.getElementById('video');
+        const canvasElement = document.getElementById('canvas');
+        const canvas = canvasElement.getContext('2d');
+        const output = document.getElementById('output');
+        const resultInfo = document.getElementById('result-info');
+        const historyList = document.getElementById('history-list');
+        const shareMenu = document.getElementById('share-menu');
+        const mrzFrame = document.getElementById('mrz-frame');
+
+        let currentMode = null;
+        let animationFrameId;
+        let videoStream;
+        let scanHistory = [];
+        let lastScannedData = null;
+
+        async function startScanner(mode) {
+            currentMode = mode;
+            introContainer.style.display = 'none';
+            scannerContainer.style.display = 'flex';
+            resultContainer.style.display = 'none';
+            historyContainer.style.display = 'none';
+            output.textContent = `Đang khởi động camera...`;
+
+            // Hiển thị khung quét MRZ nếu chế độ là 'mrz'
+            if (currentMode === 'mrz') {
+                mrzFrame.style.display = 'block';
+            } else {
+                mrzFrame.style.display = 'none';
+            }
+
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: "environment",
+                        advanced: [{
+                            torch: true
+                        }]
+                    }
+                });
+                video.srcObject = videoStream;
+                video.setAttribute("playsinline", true);
+                video.play();
+                video.addEventListener('loadeddata', () => {
+                    output.textContent = `Đưa ${mode === 'qr' ? 'mã QR' : 'MRZ'} vào camera...`;
+                    tick();
+                }, { once: true });
+            } catch (err) {
+                console.error("Lỗi khi truy cập camera: ", err);
+                output.textContent = "Không thể truy cập camera. Vui lòng cho phép quyền truy cập.";
+            }
+        }
+
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvasElement.width = video.videoWidth;
+                canvasElement.height = video.videoHeight;
+                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+
+                if (currentMode === 'qr') {
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert",
+                    });
+                    if (code) {
+                        output.textContent = "Đã quét thành công!";
+                        handleQRResult(code.data);
+                        return;
+                    }
+                } else if (currentMode === 'mrz') {
+                    // Mô phỏng việc quét MRZ bằng cách đợi 2 giây
+                    output.textContent = "Đang quét MRZ... (Mô phỏng)";
+                    setTimeout(() => {
+                        const sampleMRZ = `P<UTOJOHN<<DOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<
+D23145890<9UTO8305097M1711019<<<<<<<<<<<<<0`;
+                        const parsedData = parseMRZ(sampleMRZ);
+                        handleMRZResult(parsedData);
+                    }, 2000);
+                    stopScanner();
+                    return;
+                }
+            }
+            animationFrameId = requestAnimationFrame(tick);
+        }
+        
+        function handleQRResult(data) {
+            stopScanner();
+            scannerContainer.style.display = 'none';
+            resultContainer.style.display = 'flex';
+            
+            const dataParts = data.split('|');
+            
+            const infoMap = {
+                'Số CCCD': dataParts[0] || 'N/A',
+                'Số CMND cũ': dataParts[1] || 'N/A',
+                'Họ và tên': dataParts[2] || 'N/A',
+                'Ngày sinh': dataParts[3] || 'N/A',
+                'Giới tính': dataParts[4] || 'N/A',
+                'Địa chỉ': dataParts[5] || 'N/A',
+            };
+            
+            lastScannedData = infoMap;
+
+            resultInfo.innerHTML = '';
+            for (const key in infoMap) {
+                const div = document.createElement('div');
+                div.innerHTML = `<span>${key}:</span> ${infoMap[key]}`;
+                resultInfo.appendChild(div);
+            }
+        }
+        
+        function parseMRZ(mrzString) {
+            const lines = mrzString.split('\n');
+            const line1 = lines[0];
+            const line2 = lines[1];
+            
+            const name = line1.substring(5, 44).replace(/</g, ' ').trim();
+            const passportNumber = line2.substring(0, 9).trim();
+            const nationality = line2.substring(10, 13);
+            const dob = line2.substring(13, 19);
+            const gender = line2.substring(20, 21);
+            const expiryDate = line2.substring(21, 27);
+            
+            // Format ngày tháng từ YYMMDD sang DD/MM/YYYY
+            const formatDOB = `Ngày: ${dob.substring(4, 6)}/Tháng: ${dob.substring(2, 4)}/Năm: 19${dob.substring(0, 2)}`;
+            const formatExpiryDate = `Ngày: ${expiryDate.substring(4, 6)}/Tháng: ${expiryDate.substring(2, 4)}/Năm: 20${expiryDate.substring(0, 2)}`;
+            
+            return {
+                'Họ và tên': name,
+                'Số Hộ chiếu': passportNumber,
+                'Quốc tịch': nationality,
+                'Ngày sinh': formatDOB,
+                'Giới tính': gender === 'M' ? 'Nam' : 'Nữ',
+                'Ngày hết hạn': formatExpiryDate
+            };
+        }
+        
+        function handleMRZResult(parsedData) {
+            stopScanner();
+            scannerContainer.style.display = 'none';
+            resultContainer.style.display = 'flex';
+
+            lastScannedData = parsedData;
+
+            resultInfo.innerHTML = '';
+            for (const key in parsedData) {
+                const div = document.createElement('div');
+                div.innerHTML = `<span>${key}:</span> ${parsedData[key]}`;
+                resultInfo.appendChild(div);
+            }
+        }
+
+        function stopScanner() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            mrzFrame.style.display = 'none';
+        }
+
+        function goBack() {
+            stopScanner();
+            scannerContainer.style.display = 'none';
+            introContainer.style.display = 'flex';
+            output.textContent = "Đã dừng. Chọn lại để quét.";
+        }
+
+        function resetApp() {
+            resultContainer.style.display = 'none';
+            historyContainer.style.display = 'none';
+            introContainer.style.display = 'flex';
+        }
+
+        async function toggleFlash(mode) {
+            if (!videoStream) {
+                output.textContent = "Camera chưa được khởi động.";
+                return;
+            }
+            const track = videoStream.getVideoTracks()[0];
+            try {
+                const capabilities = track.getCapabilities();
+                if (capabilities.torch) {
+                    if (mode === 'on') {
+                        await track.applyConstraints({ advanced: [{ torch: true }] });
+                        output.textContent = "Đèn flash: Bật";
+                    } else if (mode === 'off') {
+                        await track.applyConstraints({ advanced: [{ torch: false }] });
+                        output.textContent = "Đèn flash: Tắt";
+                    } else if (mode === 'auto') {
+                        await track.applyConstraints({ advanced: [{ torch: false }] });
+                        output.textContent = "Đèn flash: Tự động (Không hỗ trợ trực tiếp, đã tắt)";
+                    }
+                } else {
+                    output.textContent = "Thiết bị không hỗ trợ đèn flash.";
+                }
+            } catch (err) {
+                console.error("Lỗi khi bật/tắt đèn flash: ", err);
+                output.textContent = "Lỗi khi điều khiển đèn flash.";
+            }
+        }
+        
+        function toggleShareMenu() {
+            shareMenu.style.display = shareMenu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function takeScreenshot() {
+            const containerToCapture = resultContainer;
+            html2canvas(containerToCapture, {
+                useCORS: true,
+                backgroundColor: null,
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'screenshot.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+        
+        function goToHistoryAndSave() {
+            if (lastScannedData) {
+                const newRecord = {
+                    timestamp: new Date().toLocaleString(),
+                    mode: currentMode,
+                    data: lastScannedData
+                };
+                scanHistory.unshift(newRecord);
+                renderHistory();
+                resultContainer.style.display = 'none';
+                historyContainer.style.display = 'flex';
+            } else {
+                alert("Không có dữ liệu để lưu.");
+            }
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            if (scanHistory.length === 0) {
+                historyList.innerHTML = '<p style="text-align:center;">Lịch sử trống.</p>';
+                return;
+            }
+            scanHistory.forEach(record => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+                let dataHtml = '';
+                for (const key in record.data) {
+                    dataHtml += `<p><strong>${key}:</strong> ${record.data[key]}</p>`;
+                }
+                item.innerHTML = `
+                    <div>
+                        ${dataHtml}
+                        <p class="timestamp">Quét lúc: ${record.timestamp}</p>
+                    </div>
+                `;
+                historyList.appendChild(item);
+            });
+        }
+
+        window.onclick = function(event) {
+            if (event.target !== document.querySelector('.action-button') && !shareMenu.contains(event.target)) {
+                shareMenu.style.display = 'none';
+            }
+        };
+
+        window.onload = () => {
+            introContainer.style.display = 'flex';
+            scannerContainer.style.display = 'none';
+            resultContainer.style.display = 'none';
+            historyContainer.style.display = 'none';
+
+            // Thiết lập các đường dẫn chia sẻ
+            const shareZalo = document.getElementById('share-zalo');
+            shareZalo.href = "https://zalo.me/share?text=" + encodeURIComponent("Kết quả quét CCCD: \n" + JSON.stringify(lastScannedData, null, 2));
+
+            const shareMessenger = document.getElementById('share-messenger');
+            shareMessenger.href = "fb-messenger://share/?link=" + encodeURIComponent(window.location.href);
+        };
+    </script>
+</body>
+</html>
