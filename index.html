@@ -334,21 +334,14 @@
         const mrzFrame = document.getElementById('mrz-frame');
         const imageUpload = document.getElementById('image-upload');
         
-        // Khởi tạo worker Tesseract.js một lần duy nhất
-        const tesseractWorker = Tesseract.createWorker({
-            logger: m => {
-                if (m.status === 'recognizing text') {
-                    output.textContent = `Đang xử lý OCR: ${Math.round(m.progress * 100)}%`;
-                }
-            }
-        });
-        
+        let tesseractWorker = null;
         let currentMode = null;
         let animationFrameId;
         let videoStream;
         let scanHistory = [];
         let lastScannedData = null;
         let mrzScanCounter = 0;
+        let ocrReady = false;
 
         // Tải và khởi tạo worker ngay khi trang tải xong
         window.onload = async () => {
@@ -358,10 +351,36 @@
             historyContainer.style.display = 'none';
             
             output.textContent = "Đang chuẩn bị công cụ OCR...";
-            await tesseractWorker.load();
-            await tesseractWorker.loadLanguage('eng');
-            await tesseractWorker.initialize('eng');
-            output.textContent = "Sẵn sàng.";
+            
+            try {
+                tesseractWorker = Tesseract.createWorker({
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            output.textContent = `Đang xử lý OCR: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                });
+                console.log("Worker Tesseract được tạo.");
+                
+                await tesseractWorker.load();
+                console.log("Worker Tesseract đã tải.");
+                
+                await tesseractWorker.loadLanguage('eng');
+                await tesseractWorker.initialize('eng');
+                console.log("Worker Tesseract đã khởi tạo.");
+                output.textContent = "Sẵn sàng.";
+                ocrReady = true;
+            } catch (error) {
+                console.error("Lỗi khi khởi tạo worker Tesseract:", error);
+                output.textContent = "Lỗi khi tải công cụ OCR. Vui lòng thử lại.";
+            }
+
+            // Thiết lập các đường dẫn chia sẻ
+            const shareZalo = document.getElementById('share-zalo');
+            shareZalo.href = "https://zalo.me/share?text=" + encodeURIComponent("Kết quả quét CCCD: \n" + JSON.stringify(lastScannedData, null, 2));
+
+            const shareMessenger = document.getElementById('share-messenger');
+            shareMessenger.href = "fb-messenger://share/?link=" + encodeURIComponent(window.location.href);
         };
 
         async function startScanner(mode) {
@@ -408,7 +427,6 @@
                 canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
                 const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
                 
-                // Kiểm tra xem canvas có trống không trước khi xử lý
                 const isBlank = !imageData.data.some(pixel => pixel > 0);
                 if (isBlank) {
                     animationFrameId = requestAnimationFrame(tick);
@@ -425,12 +443,10 @@
                         return;
                     }
                 } else if (currentMode === 'mrz') {
-                    // Cập nhật trạng thái quét
                     mrzScanCounter++;
                     output.textContent = `Đang tìm kiếm mã MRZ...`;
                     
                     try {
-                        // Gọi hàm xử lý MRZ thực tế
                         const mrzData = await processMRZFrame(imageData);
                         
                         if (mrzData) {
@@ -448,22 +464,27 @@
             animationFrameId = requestAnimationFrame(tick);
         }
 
-        // Hàm này sử dụng Tesseract.js để xử lý OCR trên hình ảnh.
         async function processMRZFrame(imageData) {
-            const { data: { text } } = await tesseractWorker.recognize(
-                imageData, { 
-                    tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<',
-                    psm: 6
-                }
-            );
-
-            // Tesseract.js sẽ trả về toàn bộ văn bản nó tìm thấy.
-            // Chúng ta cần lọc ra các dòng MRZ.
-            const lines = text.split('\n').filter(line => line.length > 30);
-            if (lines.length >= 2) {
-                return lines.slice(0, 2).join('\n');
+            if (!tesseractWorker || !ocrReady) {
+                console.error("Lỗi: Worker Tesseract chưa được khởi tạo hoặc chưa sẵn sàng.");
+                return null;
             }
-            return null;
+            try {
+                const { data: { text } } = await tesseractWorker.recognize(
+                    imageData, { 
+                        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<',
+                        psm: 6
+                    }
+                );
+                const lines = text.split('\n').filter(line => line.length > 30);
+                if (lines.length >= 2) {
+                    return lines.slice(0, 2).join('\n');
+                }
+                return null;
+            } catch (error) {
+                console.error("Lỗi khi nhận dạng văn bản:", error);
+                throw error;
+            }
         }
 
         function handleQRResult(data) {
@@ -504,7 +525,6 @@
             const gender = line2.substring(20, 21);
             const expiryDate = line2.substring(21, 27);
             
-            // Format ngày tháng từ YYMMDD sang DD/MM/YYYY
             const formatDOB = `Ngày: ${dob.substring(4, 6)}/Tháng: ${dob.substring(2, 4)}/Năm: 19${dob.substring(0, 2)}`;
             const formatExpiryDate = `Ngày: ${expiryDate.substring(4, 6)}/Tháng: ${expiryDate.substring(2, 4)}/Năm: 20${expiryDate.substring(0, 2)}`;
             
@@ -547,7 +567,7 @@
             stopScanner();
             scannerContainer.style.display = 'none';
             introContainer.style.display = 'flex';
-            output.textContent = "Đã dừng. Chọn lại để quét.";
+            output.textContent = "Sẵn sàng.";
         }
 
         function resetApp() {
@@ -676,8 +696,11 @@
 
         async function processUploadedImage(imageData) {
             output.textContent = "Đang phân tích hình ảnh...";
+            if (!ocrReady) {
+                output.textContent = "Công cụ OCR chưa sẵn sàng. Vui lòng đợi một chút và thử lại.";
+                return;
+            }
 
-            // 1. Cố gắng tìm mã QR trước
             const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
                 inversionAttempts: "dontInvert",
             });
@@ -688,7 +711,6 @@
                 return;
             }
 
-            // 2. Nếu không có mã QR, chuyển sang tìm mã MRZ
             try {
                 output.textContent = "Không tìm thấy mã QR, đang tìm mã MRZ...";
                 const mrzData = await processMRZFrame(imageData);
@@ -713,8 +735,6 @@
                 shareMenu.style.display = 'none';
             }
         };
-
-        
     </script>
 </body>
 </html>
