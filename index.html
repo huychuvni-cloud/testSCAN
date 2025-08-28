@@ -332,6 +332,7 @@
         let videoStream;
         let scanHistory = [];
         let lastScannedData = null;
+        let mrzScanCounter = 0;
 
         async function startScanner(mode) {
             currentMode = mode;
@@ -341,9 +342,9 @@
             historyContainer.style.display = 'none';
             output.textContent = `Đang khởi động camera...`;
 
-            // Hiển thị khung quét MRZ nếu chế độ là 'mrz'
             if (currentMode === 'mrz') {
                 mrzFrame.style.display = 'block';
+                mrzScanCounter = 0;
             } else {
                 mrzFrame.style.display = 'none';
             }
@@ -387,21 +388,33 @@
                         return;
                     }
                 } else if (currentMode === 'mrz') {
-                    // Mô phỏng việc quét MRZ bằng cách đợi 2 giây
-                    output.textContent = "Đang quét MRZ... (Mô phỏng)";
-                    setTimeout(() => {
-                        const sampleMRZ = `P<UTOJOHN<<DOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<
-D23145890<9UTO8305097M1711019<<<<<<<<<<<<<0`;
-                        const parsedData = parseMRZ(sampleMRZ);
+                    // Cập nhật trạng thái quét
+                    mrzScanCounter++;
+                    output.textContent = `Đang tìm kiếm mã MRZ...`;
+                    
+                    // Gọi hàm xử lý MRZ (hiện tại là mô phỏng)
+                    const mrzData = processMRZFrame(imageData);
+                    
+                    if (mrzData) {
+                        output.textContent = "Đã quét thành công!";
+                        const parsedData = parseMRZ(mrzData);
                         handleMRZResult(parsedData);
-                    }, 2000);
-                    stopScanner();
-                    return;
+                        return;
+                    }
                 }
             }
             animationFrameId = requestAnimationFrame(tick);
         }
-        
+
+        // Hàm này mô phỏng việc quét và xử lý MRZ từ khung hình.
+        // Trong một ứng dụng thực tế, bạn sẽ gửi imageData đến một thư viện OCR.
+        // Hiện tại, hàm này sẽ luôn trả về null.
+        function processMRZFrame(imageData) {
+            // Loại bỏ hoàn toàn dữ liệu mẫu, ứng dụng sẽ không tìm thấy gì.
+            // Để có chức năng thực tế, bạn cần tích hợp một thư viện OCR.
+            return null;
+        }
+
         function handleQRResult(data) {
             stopScanner();
             scannerContainer.style.display = 'none';
