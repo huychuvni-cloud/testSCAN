@@ -2,739 +2,463 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Quét Mã</title>
+    <!-- Cấu hình viewport chuẩn cho ứng dụng di động/POS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>POS Scanner - CCCD & MRZ</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Thư viện quét QR -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <!-- Thư viện OCR (Nhận diện chữ cái) cho MRZ -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
     <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            margin: 0;
-            background-color: #f0f2f5;
-            font-family: -apple-system, BlinkMacMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: #333;
-            height: 100vh;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 90%;
-            max-width: 600px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
-            background-color: #fff;
-            box-sizing: border-box;
-            text-align: center;
-            position: relative;
-        }
-        h1 {
-            color: #4a90e2;
-            margin-bottom: 20px;
-        }
-        .intro-container h1 {
-            font-size: 2.5em;
-            margin-bottom: 30px;
-        }
-        .button-group {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            width: 100%;
-        }
-        .scan-button, .upload-button {
-            padding: 15px 25px;
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #fff;
-            background: linear-gradient(45deg, #4a90e2, #50c9c3);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-        .scan-button:hover, .upload-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
-        }
-
-        .scanner-container, .result-container, .history-container {
-            display: none;
-            width: 100%;
-        }
-        .video-container {
-            position: relative;
-            width: 100%;
-            border-radius: 8px;
-            border: 2px solid #ddd;
-            overflow: hidden;
-        }
-        video {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        canvas {
-            display: none;
-        }
-        #output {
-            margin-top: 20px;
-            padding: 15px;
-            width: 100%;
-            background-color: #e9f5ff;
-            border: 1px solid #bce0fd;
-            border-radius: 8px;
-            font-size: 1.1em;
-            text-align: center;
-            word-wrap: break-word;
-        }
-        .controls-top {
+        /* Tùy chỉnh UI */
+        body { -webkit-tap-highlight-color: transparent; }
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: bold; }
+        .tab-inactive { color: #6b7280; }
+        
+        /* Container Camera */
+        .camera-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 250px;}
+        #qr-reader, #mrz-video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Khung định vị MRZ */
+        #mrz-overlay {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            display: flex;
-            justify-content: space-between;
+            bottom: 10%;
+            left: 5%;
+            width: 90%;
+            height: 25%;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 4px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Làm tối xung quanh */
             z-index: 10;
-        }
-        .controls-bottom {
-            margin-top: 15px;
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-        }
-        .control-button {
-            background-color: rgba(0, 0, 0, 0.5);
-            border: none;
-            border-radius: 50%;
-            width: 45px;
-            height: 45px;
-            color: #fff;
-            font-size: 1.2em;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .control-button:hover {
-            background-color: rgba(0, 0, 0, 0.7);
-        }
-        .small-button {
-            background-color: rgba(0, 0, 0, 0.5);
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            color: #fff;
-            font-size: 1em;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        .small-button:hover {
-            background-color: rgba(0, 0, 0, 0.7);
-        }
-        .result-info {
-            width: 100%;
-            text-align: left;
-            margin-top: 20px;
-        }
-        .result-info div {
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-        }
-        .result-info div:last-child {
-            border-bottom: none;
-        }
-        .result-info span {
-            font-weight: bold;
-        }
-        .action-buttons {
-            display: flex;
-            flex-direction: row;
-            gap: 15px;
-            margin-top: 20px;
-            width: 100%;
-            justify-content: center;
-        }
-        .action-button {
-            padding: 12px 20px;
-            font-size: 1em;
-            font-weight: bold;
-            color: #fff;
-            background: linear-gradient(45deg, #4a90e2, #50c9c3);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            flex-grow: 1;
-        }
-        .share-menu {
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            padding: 10px;
             display: none;
-            z-index: 20;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .share-menu-button {
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            font-size: 1em;
-            font-weight: bold;
-            color: #333;
-            background-color: #eee;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            text-decoration: none;
-        }
-        .share-menu-button:hover {
-            background-color: #ddd;
-        }
-        .share-menu-button img {
-            width: 24px;
-            height: 24px;
-            margin-right: 10px;
-        }
-
-        .history-list {
-            width: 100%;
-            text-align: left;
-            margin-top: 20px;
-            overflow-y: auto;
-            max-height: 400px;
-        }
-        .history-item {
-            background-color: #e9f5ff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            border: 1px solid #bce0fd;
-        }
-        .history-item p {
-            margin: 0;
-            word-wrap: break-word;
-        }
-        .history-item .timestamp {
-            font-size: 0.8em;
-            color: #777;
-            margin-top: 5px;
-        }
-
-        /* Thêm CSS mới cho khung quét */
-        .mrz-scan-frame {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 90%;
-            max-width: 500px;
-            height: 80px;
-            transform: translate(-50%, -50%);
-            border: 4px solid rgba(74, 144, 226, 0.7); /* Màu xanh */
-            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
             pointer-events: none;
-            border-radius: 5px;
+        }
+        #mrz-overlay::after {
+            content: "Căn 2 dòng MRZ vào khung này";
+            position: absolute;
+            top: -25px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px black;
         }
     </style>
 </head>
-<body>
-    <div class="container intro-container">
-        <h1>Chào mừng bạn đến với Ứng dụng Quét</h1>
-        <p>Chọn loại tài liệu bạn muốn quét:</p>
-        <div class="button-group">
-            <button class="scan-button" onclick="startScanner('qr')">Quét CCCD (QR Code)</button>
-            <button class="scan-button" onclick="startScanner('mrz')">Quét Hộ chiếu (MRZ)</button>
-            <!-- Nút đã được cập nhật để cho phép chọn từ thiết bị -->
-            <button class="upload-button" onclick="uploadImage()">Chọn từ thiết bị</button>
-        </div>
-        <!-- Input đã được cập nhật để chấp nhận nhiều định dạng hình ảnh và PDF -->
-        <input type="file" id="image-upload" accept="image/*, .pdf" style="display: none;">
-    </div>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased flex flex-col h-screen overflow-hidden">
 
-    <div class="container scanner-container">
-        <h1>Máy Quét</h1>
-        <div class="video-container">
-            <div class="controls-top">
-                <button class="small-button" onclick="goBack()">&#8592;</button>
-                <button class="small-button" onclick="stopScanner()">&#10006;</button>
-            </div>
-            <video id="video" playsinline></video>
-            <canvas id="canvas"></canvas>
-            <div id="mrz-frame" class="mrz-scan-frame" style="display:none;"></div>
+    <!-- Header -->
+    <header class="bg-white shadow-sm z-20">
+        <div class="bg-blue-600 text-white p-3 text-center">
+            <h1 class="text-lg font-bold">Smart POS Scanner</h1>
         </div>
-        <div id="output">Đang chờ...</div>
-        <div class="controls-bottom">
-            <button class="control-button" onclick="toggleFlash('off')">Off</button>
-            <button class="control-button" onclick="toggleFlash('on')">On</button>
-            <button class="control-button" onclick="toggleFlash('auto')">Auto</button>
+        <!-- Tabs -->
+        <div class="flex justify-between border-b bg-white">
+            <button id="tab-qr" class="flex-1 py-3 tab-active text-sm uppercase tracking-wide transition">Quét CCCD/VNeID</button>
+            <button id="tab-mrz" class="flex-1 py-3 tab-inactive text-sm uppercase tracking-wide transition border-l">Quét Hộ Chiếu</button>
         </div>
-    </div>
+    </header>
 
-    <div class="container result-container">
-        <h1>Thông tin đã quét</h1>
-        <div class="result-info" id="result-info"></div>
-        <div class="action-buttons">
-            <button class="action-button" onclick="toggleShareMenu()">Chia sẻ</button>
-            <button class="action-button" onclick="takeScreenshot()">Chụp màn hình</button>
-            <button class="action-button" onclick="goToHistoryAndSave()">Xác nhận</button>
-        </div>
-        <div class="button-group" style="margin-top: 20px;">
-            <button class="scan-button" onclick="resetApp()">Quét lại</button>
-        </div>
-        <div class="share-menu" id="share-menu">
-            <a href="#" class="share-menu-button" id="share-zalo">
-                <img src="https://logodix.com/logo/1915668.png" alt="Zalo Logo"> Zalo
-            </a>
-            <a href="#" class="share-menu-button" id="share-messenger">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/b/be/Facebook_Messenger_logo_2020.svg" alt="Messenger Logo"> Messenger
-            </a>
-        </div>
-    </div>
-
-    <div class="container history-container">
-        <h1>Lịch sử quét</h1>
-        <div class="history-list" id="history-list"></div>
-        <div class="button-group" style="margin-top: 20px;">
-            <button class="scan-button" onclick="resetApp()">Quay lại màn hình chính</button>
-        </div>
-    </div>
-
-    <!-- Thư viện jsQR -->
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.3.1/dist/jsQR.min.js"></script>
-    <!-- Thư viện HTML2Canvas cho chức năng chụp màn hình -->
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-    <!-- Tích hợp Tesseract.js cho OCR thực tế -->
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@2.1.4/dist/tesseract.min.js'></script>
-    <script>
-        const introContainer = document.querySelector('.intro-container');
-        const scannerContainer = document.querySelector('.scanner-container');
-        const resultContainer = document.querySelector('.result-container');
-        const historyContainer = document.querySelector('.history-container');
-        const video = document.getElementById('video');
-        const canvasElement = document.getElementById('canvas');
-        const canvas = canvasElement.getContext('2d');
-        const output = document.getElementById('output');
-        const resultInfo = document.getElementById('result-info');
-        const historyList = document.getElementById('history-list');
-        const shareMenu = document.getElementById('share-menu');
-        const mrzFrame = document.getElementById('mrz-frame');
-        const imageUpload = document.getElementById('image-upload');
+    <!-- Main Content -->
+    <main class="flex-grow p-4 flex flex-col overflow-y-auto">
         
-        let tesseractWorker = null;
-        let currentMode = null;
-        let animationFrameId;
-        let videoStream;
-        let scanHistory = [];
-        let lastScannedData = null;
-        let mrzScanCounter = 0;
-        let ocrReady = false;
-
-        // Tải và khởi tạo worker ngay khi trang tải xong
-        window.onload = async () => {
-            introContainer.style.display = 'flex';
-            scannerContainer.style.display = 'none';
-            resultContainer.style.display = 'none';
-            historyContainer.style.display = 'none';
-            
-            output.textContent = "Đang chuẩn bị công cụ OCR...";
-            
-            try {
-                tesseractWorker = Tesseract.createWorker({
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            output.textContent = `Đang xử lý OCR: ${Math.round(m.progress * 100)}%`;
-                        }
-                    }
-                });
-                console.log("Worker Tesseract được tạo.");
+        <!-- Khung hiển thị Camera chung -->
+        <div class="w-full bg-white rounded-xl shadow-md p-3 mb-4">
+            <div class="camera-container flex items-center justify-center">
+                <!-- Vùng cho QR -->
+                <div id="qr-reader" class="w-full h-full absolute inset-0"></div>
                 
-                await tesseractWorker.load();
-                console.log("Worker Tesseract đã tải.");
+                <!-- Vùng cho MRZ -->
+                <video id="mrz-video" class="absolute inset-0 hidden" autoplay playsinline></video>
+                <div id="mrz-overlay"></div>
                 
-                await tesseractWorker.loadLanguage('eng');
-                await tesseractWorker.initialize('eng');
-                console.log("Worker Tesseract đã khởi tạo.");
-                output.textContent = "Sẵn sàng.";
-                ocrReady = true;
-            } catch (error) {
-                console.error("Lỗi khi khởi tạo worker Tesseract:", error);
-                output.textContent = "Lỗi khi tải công cụ OCR. Vui lòng thử lại.";
-            }
+                <!-- Hiệu ứng tải/Loading -->
+                <div id="loading-indicator" class="absolute z-30 text-white text-sm text-center px-4 hidden">
+                    <svg class="animate-spin h-8 w-8 text-white mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="loading-text">Đang chuẩn bị Camera...</span>
+                </div>
+            </div>
 
-            // Thiết lập các đường dẫn chia sẻ
-            const shareZalo = document.getElementById('share-zalo');
-            shareZalo.href = "https://zalo.me/share?text=" + encodeURIComponent("Kết quả quét CCCD: \n" + JSON.stringify(lastScannedData, null, 2));
+            <!-- Nút điều khiển -->
+            <div class="mt-4">
+                <button id="btn-action" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition">
+                    Bắt đầu Quét QR
+                </button>
+            </div>
+        </div>
 
-            const shareMessenger = document.getElementById('share-messenger');
-            shareMessenger.href = "fb-messenger://share/?link=" + encodeURIComponent(window.location.href);
+        <!-- Canvas ẩn dùng để xử lý ảnh cắt MRZ trước khi OCR -->
+        <canvas id="mrz-canvas" class="hidden"></canvas>
+
+        <!-- Khu vực hiển thị kết quả -->
+        <div class="w-full bg-white rounded-xl shadow-md p-4 flex-grow mb-4">
+            <div class="flex justify-between items-center border-b pb-2 mb-3">
+                <h2 class="text-md font-bold text-gray-700">Dữ liệu trích xuất:</h2>
+                <button id="btn-clear" class="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600 hidden">Xóa</button>
+            </div>
+            
+            <!-- Kết quả QR (CCCD) -->
+            <div id="result-qr" class="text-sm space-y-2 hidden">
+                <p><strong>Số CCCD:</strong> <span id="r-cccd" class="text-blue-600 font-bold"></span></p>
+                <p><strong>Họ và tên:</strong> <span id="r-name" class="uppercase font-bold text-gray-900"></span></p>
+                <p><strong>Ngày sinh:</strong> <span id="r-dob"></span></p>
+                <p><strong>Giới tính:</strong> <span id="r-gender"></span></p>
+                <p><strong>Địa chỉ:</strong> <span id="r-address"></span></p>
+            </div>
+
+            <!-- Kết quả MRZ (Hộ chiếu) -->
+            <div id="result-mrz" class="text-sm space-y-2 hidden">
+                <p><strong>Số Hộ Chiếu:</strong> <span id="m-passport" class="text-red-600 font-bold text-lg"></span></p>
+                <p><strong>Họ và Tên:</strong> <span id="m-name" class="uppercase font-bold text-gray-900"></span></p>
+                <p><strong>Quốc tịch:</strong> <span id="m-nation"></span></p>
+                <p><strong>Ngày sinh:</strong> <span id="m-dob"></span></p>
+                <p><strong>Giới tính:</strong> <span id="m-gender"></span></p>
+                <p><strong>Ngày hết hạn:</strong> <span id="m-expire"></span></p>
+            </div>
+
+            <!-- Dữ liệu thô / Log -->
+            <div class="mt-4 p-2 bg-gray-50 rounded border text-xs text-gray-500 font-mono break-words min-h-[50px]" id="raw-log">
+                Vui lòng bấm nút bắt đầu và đưa giấy tờ vào khung hình...
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // -- QUẢN LÝ TRẠNG THÁI --
+        let currentMode = 'QR'; // 'QR' hoặc 'MRZ'
+        let isScanning = false;
+        
+        // QR Variables
+        let html5QrCode = null;
+
+        // MRZ Variables
+        let videoStream = null;
+        let mrzInterval = null;
+        let ocrWorker = null;
+        let isOcrReady = false;
+
+        // DOM Elements
+        const ui = {
+            tabQr: document.getElementById('tab-qr'),
+            tabMrz: document.getElementById('tab-mrz'),
+            btnAction: document.getElementById('btn-action'),
+            btnClear: document.getElementById('btn-clear'),
+            qrContainer: document.getElementById('qr-reader'),
+            mrzVideo: document.getElementById('mrz-video'),
+            mrzOverlay: document.getElementById('mrz-overlay'),
+            loading: document.getElementById('loading-indicator'),
+            loadingText: document.getElementById('loading-text'),
+            log: document.getElementById('raw-log'),
+            resQr: document.getElementById('result-qr'),
+            resMrz: document.getElementById('result-mrz')
         };
 
-        async function startScanner(mode) {
+        // -- LOGIC CHUYỂN TAB --
+        ui.tabQr.addEventListener('click', () => switchTab('QR'));
+        ui.tabMrz.addEventListener('click', () => switchTab('MRZ'));
+
+        async function switchTab(mode) {
+            if (isScanning) await stopCurrentScan();
+            
             currentMode = mode;
-            introContainer.style.display = 'none';
-            scannerContainer.style.display = 'flex';
-            resultContainer.style.display = 'none';
-            historyContainer.style.display = 'none';
-            output.textContent = `Đang khởi động camera...`;
+            ui.btnAction.textContent = mode === 'QR' ? "Bắt đầu Quét CCCD" : "Bắt đầu Quét Hộ Chiếu";
+            ui.btnAction.classList.remove('bg-red-500', 'hover:bg-red-600');
+            ui.btnAction.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            
+            ui.log.innerHTML = mode === 'QR' ? "Chế độ: Đọc mã vạch 2D siêu tốc." : "Chế độ: AI OCR đọc MRZ. Vui lòng căn đúng khung.";
+            clearResults();
 
-            if (currentMode === 'mrz') {
-                mrzFrame.style.display = 'block';
-                mrzScanCounter = 0;
+            if (mode === 'QR') {
+                ui.tabQr.className = "flex-1 py-3 tab-active text-sm uppercase tracking-wide transition";
+                ui.tabMrz.className = "flex-1 py-3 tab-inactive text-sm uppercase tracking-wide transition border-l";
+                ui.qrContainer.style.display = 'block';
+                ui.mrzVideo.classList.add('hidden');
+                ui.mrzOverlay.style.display = 'none';
             } else {
-                mrzFrame.style.display = 'none';
-            }
-
-            try {
-                videoStream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: "environment",
-                        advanced: [{
-                            torch: true
-                        }]
-                    }
-                });
-                video.srcObject = videoStream;
-                video.setAttribute("playsinline", true);
-                video.play();
-                video.addEventListener('loadeddata', () => {
-                    output.textContent = `Đưa ${mode === 'qr' ? 'mã QR' : 'MRZ'} vào camera...`;
-                    tick();
-                }, { once: true });
-            } catch (err) {
-                console.error("Lỗi khi truy cập camera: ", err);
-                output.textContent = "Không thể truy cập camera. Vui lòng cho phép quyền truy cập.";
+                ui.tabMrz.className = "flex-1 py-3 tab-active text-sm uppercase tracking-wide transition border-l";
+                ui.tabQr.className = "flex-1 py-3 tab-inactive text-sm uppercase tracking-wide transition";
+                ui.qrContainer.style.display = 'none';
+                ui.mrzVideo.classList.remove('hidden');
+                ui.mrzOverlay.style.display = 'block';
+                // Khởi tạo Tesseract nếu chưa có
+                initTesseract();
             }
         }
 
-        async function tick() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvasElement.width = video.videoWidth;
-                canvasElement.height = video.videoHeight;
-                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-                
-                const isBlank = !imageData.data.some(pixel => pixel > 0);
-                if (isBlank) {
-                    animationFrameId = requestAnimationFrame(tick);
-                    return;
-                }
-
-                if (currentMode === 'qr') {
-                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                        inversionAttempts: "dontInvert",
-                    });
-                    if (code) {
-                        output.textContent = "Đã quét thành công!";
-                        handleQRResult(code.data);
-                        return;
-                    }
-                } else if (currentMode === 'mrz') {
-                    mrzScanCounter++;
-                    output.textContent = `Đang tìm kiếm mã MRZ...`;
-                    
-                    try {
-                        const mrzData = await processMRZFrame(imageData);
-                        
-                        if (mrzData) {
-                            output.textContent = "Đã quét thành công!";
-                            const parsedData = parseMRZ(mrzData);
-                            handleMRZResult(parsedData);
-                            return;
-                        }
-                    } catch (err) {
-                        console.error("Lỗi khi xử lý OCR từ camera: ", err);
-                        output.textContent = "Lỗi khi xử lý OCR.";
-                    }
-                }
-            }
-            animationFrameId = requestAnimationFrame(tick);
-        }
-
-        async function processMRZFrame(imageData) {
-            if (!tesseractWorker || !ocrReady) {
-                console.error("Lỗi: Worker Tesseract chưa được khởi tạo hoặc chưa sẵn sàng.");
-                return null;
-            }
-            try {
-                const { data: { text } } = await tesseractWorker.recognize(
-                    imageData, { 
-                        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<',
-                        psm: 6
-                    }
-                );
-                const lines = text.split('\n').filter(line => line.length > 30);
-                if (lines.length >= 2) {
-                    return lines.slice(0, 2).join('\n');
-                }
-                return null;
-            } catch (error) {
-                console.error("Lỗi khi nhận dạng văn bản:", error);
-                throw error;
-            }
-        }
-
-        function handleQRResult(data) {
-            stopScanner();
-            scannerContainer.style.display = 'none';
-            resultContainer.style.display = 'flex';
-            
-            const dataParts = data.split('|');
-            
-            const infoMap = {
-                'Số CCCD': dataParts[0] || 'N/A',
-                'Số CMND cũ': dataParts[1] || 'N/A',
-                'Họ và tên': dataParts[2] || 'N/A',
-                'Ngày sinh': dataParts[3] || 'N/A',
-                'Giới tính': dataParts[4] || 'N/A',
-                'Địa chỉ': dataParts[5] || 'N/A',
-            };
-            
-            lastScannedData = infoMap;
-
-            resultInfo.innerHTML = '';
-            for (const key in infoMap) {
-                const div = document.createElement('div');
-                div.innerHTML = `<span>${key}:</span> ${infoMap[key]}`;
-                resultInfo.appendChild(div);
-            }
-        }
-        
-        function parseMRZ(mrzString) {
-            const lines = mrzString.split('\n');
-            const line1 = lines[0];
-            const line2 = lines[1];
-            
-            const name = line1.substring(5, 44).replace(/</g, ' ').trim();
-            const passportNumber = line2.substring(0, 9).trim();
-            const nationality = line2.substring(10, 13);
-            const dob = line2.substring(13, 19);
-            const gender = line2.substring(20, 21);
-            const expiryDate = line2.substring(21, 27);
-            
-            const formatDOB = `Ngày: ${dob.substring(4, 6)}/Tháng: ${dob.substring(2, 4)}/Năm: 19${dob.substring(0, 2)}`;
-            const formatExpiryDate = `Ngày: ${expiryDate.substring(4, 6)}/Tháng: ${expiryDate.substring(2, 4)}/Năm: 20${expiryDate.substring(0, 2)}`;
-            
-            return {
-                'Họ và tên': name,
-                'Số Hộ chiếu': passportNumber,
-                'Quốc tịch': nationality,
-                'Ngày sinh': formatDOB,
-                'Giới tính': gender === 'M' ? 'Nam' : 'Nữ',
-                'Ngày hết hạn': formatExpiryDate
-            };
-        }
-        
-        function handleMRZResult(parsedData) {
-            stopScanner();
-            scannerContainer.style.display = 'none';
-            resultContainer.style.display = 'flex';
-
-            lastScannedData = parsedData;
-
-            resultInfo.innerHTML = '';
-            for (const key in parsedData) {
-                const div = document.createElement('div');
-                div.innerHTML = `<span>${key}:</span> ${parsedData[key]}`;
-                resultInfo.appendChild(div);
-            }
-        }
-
-        function stopScanner() {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-            if (videoStream) {
-                videoStream.getTracks().forEach(track => track.stop());
-            }
-            mrzFrame.style.display = 'none';
-        }
-
-        function goBack() {
-            stopScanner();
-            scannerContainer.style.display = 'none';
-            introContainer.style.display = 'flex';
-            output.textContent = "Sẵn sàng.";
-        }
-
-        function resetApp() {
-            resultContainer.style.display = 'none';
-            historyContainer.style.display = 'none';
-            introContainer.style.display = 'flex';
-            output.textContent = "Sẵn sàng.";
-        }
-
-        async function toggleFlash(mode) {
-            if (!videoStream) {
-                output.textContent = "Camera chưa được khởi động.";
-                return;
-            }
-            const track = videoStream.getVideoTracks()[0];
-            try {
-                const capabilities = track.getCapabilities();
-                if (capabilities.torch) {
-                    if (mode === 'on') {
-                        await track.applyConstraints({ advanced: [{ torch: true }] });
-                        output.textContent = "Đèn flash: Bật";
-                    } else if (mode === 'off') {
-                        await track.applyConstraints({ advanced: [{ torch: false }] });
-                        output.textContent = "Đèn flash: Tắt";
-                    } else if (mode === 'auto') {
-                        await track.applyConstraints({ advanced: [{ torch: false }] });
-                        output.textContent = "Đèn flash: Tự động (Không hỗ trợ trực tiếp, đã tắt)";
-                    }
-                } else {
-                    output.textContent = "Thiết bị không hỗ trợ đèn flash.";
-                }
-            } catch (err) {
-                console.error("Lỗi khi bật/tắt đèn flash: ", err);
-                output.textContent = "Lỗi khi điều khiển đèn flash.";
-            }
-        }
-        
-        function toggleShareMenu() {
-            shareMenu.style.display = shareMenu.style.display === 'flex' ? 'none' : 'flex';
-        }
-
-        function takeScreenshot() {
-            const containerToCapture = resultContainer;
-            html2canvas(containerToCapture, {
-                useCORS: true,
-                backgroundColor: null,
-            }).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'screenshot.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            });
-        }
-        
-        function goToHistoryAndSave() {
-            if (lastScannedData) {
-                const newRecord = {
-                    timestamp: new Date().toLocaleString(),
-                    mode: currentMode,
-                    data: lastScannedData
-                };
-                scanHistory.unshift(newRecord);
-                renderHistory();
-                resultContainer.style.display = 'none';
-                historyContainer.style.display = 'flex';
+        // -- NÚT ĐIỀU KHIỂN CHÍNH --
+        ui.btnAction.addEventListener('click', async () => {
+            if (isScanning) {
+                await stopCurrentScan();
             } else {
-                alert("Không có dữ liệu để lưu.");
+                startCurrentScan();
             }
-        }
-
-        function renderHistory() {
-            historyList.innerHTML = '';
-            if (scanHistory.length === 0) {
-                historyList.innerHTML = '<p style="text-align:center;">Lịch sử trống.</p>';
-                return;
-            }
-            scanHistory.forEach(record => {
-                const item = document.createElement('div');
-                item.className = 'history-item';
-                let dataHtml = '';
-                for (const key in record.data) {
-                    dataHtml += `<p><strong>${key}:</strong> ${record.data[key]}</p>`;
-                }
-                item.innerHTML = `
-                    <div>
-                        ${dataHtml}
-                        <p class="timestamp">Quét lúc: ${record.timestamp}</p>
-                    </div>
-                `;
-                historyList.appendChild(item);
-            });
-        }
-
-        function uploadImage() {
-            imageUpload.click();
-        }
-
-        imageUpload.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (file.type === 'application/pdf') {
-                output.textContent = "Không thể quét mã QR hoặc MRZ từ tệp PDF. Vui lòng chọn một tệp hình ảnh.";
-                setTimeout(() => {
-                    resetApp();
-                }, 3000);
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = async function() {
-                    canvasElement.width = img.width;
-                    canvasElement.height = img.height;
-                    canvas.drawImage(img, 0, 0, img.width, img.height);
-                    const imageData = canvas.getImageData(0, 0, img.width, img.height);
-                    
-                    await processUploadedImage(imageData);
-                };
-                img.src = e.target.result;
-                stopScanner();
-            };
-            reader.readAsDataURL(file);
         });
 
-        async function processUploadedImage(imageData) {
-            output.textContent = "Đang phân tích hình ảnh...";
-            if (!ocrReady) {
-                output.textContent = "Công cụ OCR chưa sẵn sàng. Vui lòng đợi một chút và thử lại.";
-                return;
-            }
+        ui.btnClear.addEventListener('click', clearResults);
 
-            const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-            });
-
-            if (qrCode) {
-                output.textContent = "Đã tìm thấy mã QR. Đang xử lý...";
-                handleQRResult(qrCode.data);
-                return;
-            }
-
-            try {
-                output.textContent = "Không tìm thấy mã QR, đang tìm mã MRZ...";
-                const mrzData = await processMRZFrame(imageData);
-                
-                if (mrzData) {
-                    output.textContent = "Đã tìm thấy và xử lý mã MRZ.";
-                    const parsedData = parseMRZ(mrzData);
-                    handleMRZResult(parsedData);
-                } else {
-                    output.textContent = "Không tìm thấy mã QR hoặc MRZ trong hình ảnh.";
-                    setTimeout(() => { resetApp(); }, 2000);
-                }
-            } catch (err) {
-                console.error("Lỗi khi xử lý OCR: ", err);
-                output.textContent = "Lỗi khi xử lý hình ảnh. Vui lòng thử lại.";
-                setTimeout(() => { resetApp(); }, 3000);
+        function toggleActionBtn(scanning) {
+            isScanning = scanning;
+            if (scanning) {
+                ui.btnAction.textContent = "Dừng Quét";
+                ui.btnAction.classList.replace('bg-blue-600', 'bg-red-500');
+                ui.btnAction.classList.replace('hover:bg-blue-700', 'hover:bg-red-600');
+            } else {
+                ui.btnAction.textContent = currentMode === 'QR' ? "Bắt đầu Quét CCCD" : "Bắt đầu Quét Hộ Chiếu";
+                ui.btnAction.classList.replace('bg-red-500', 'bg-blue-600');
+                ui.btnAction.classList.replace('hover:bg-red-600', 'hover:bg-blue-700');
             }
         }
 
-        window.onclick = function(event) {
-            if (event.target !== document.querySelector('.action-button') && !shareMenu.contains(event.target)) {
-                shareMenu.style.display = 'none';
+        function showLoading(show, text = "Đang xử lý...") {
+            ui.loadingText.textContent = text;
+            ui.loading.style.display = show ? 'block' : 'none';
+        }
+
+        function logMsg(msg, isError = false) {
+            ui.log.innerHTML = `<span class="${isError ? 'text-red-500' : 'text-green-600'}">${msg}</span>`;
+        }
+
+        async function startQRScan() {
+            if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader");
+            
+            showLoading(true, "Đang mở camera QR...");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            try {
+                await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+                    // Quét thành công
+                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                    stopCurrentScan();
+                    parseCCCD(decodedText);
+                });
+                showLoading(false);
+                toggleActionBtn(true);
+                logMsg("Đang tìm mã QR CCCD/VNeID...");
+            } catch (err) {
+                showLoading(false);
+                logMsg("Lỗi Camera: " + err, true);
             }
-        };
+        }
+
+        function parseCCCD(qrText) {
+            const parts = qrText.split('|');
+            ui.resMrz.classList.add('hidden');
+            ui.resQr.classList.remove('hidden');
+            ui.btnClear.classList.remove('hidden');
+
+            if (parts.length >= 6) {
+                document.getElementById('r-cccd').textContent = parts[0];
+                document.getElementById('r-name').textContent = parts[2];
+                // Format ngày sinh
+                const dob = parts[3];
+                document.getElementById('r-dob').textContent = dob.length === 8 ? `${dob.slice(0,2)}/${dob.slice(2,4)}/${dob.slice(4,8)}` : dob;
+                document.getElementById('r-gender').textContent = parts[4];
+                document.getElementById('r-address').textContent = parts[5];
+                logMsg("Đã trích xuất dữ liệu CCCD thành công.");
+            } else {
+                logMsg("Đã quét QR, nhưng không phải định dạng CCCD chuẩn.<br>Nội dung: " + qrText);
+            }
+        }
+
+        async function initTesseract() {
+            if (isOcrReady || ocrWorker != null) return;
+            showLoading(true, "Đang tải Engine AI (Tesseract)...");
+            logMsg("Đang tải dữ liệu mô hình OCR, vui lòng đợi...");
+            
+            try {
+                ocrWorker = await Tesseract.createWorker('eng');
+                await ocrWorker.setParameters({
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', // MRZ chỉ có những ký tự này
+                });
+                isOcrReady = true;
+                showLoading(false);
+                logMsg("Engine AI đã sẵn sàng!");
+            } catch (error) {
+                showLoading(false);
+                logMsg("Lỗi khởi tạo AI OCR: " + error.message, true);
+            }
+        }
+
+        async function startMRZScan() {
+            if (!isOcrReady) {
+                alert("Hệ thống AI chưa tải xong, vui lòng đợi vài giây!");
+                return;
+            }
+            showLoading(true, "Đang mở camera...");
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
+                ui.mrzVideo.srcObject = videoStream;
+                ui.mrzVideo.play();
+                showLoading(false);
+                toggleActionBtn(true);
+                logMsg("Hãy đưa 2 dòng MRZ dưới cùng Hộ chiếu vào sát khung chữ nhật...");
+                
+                // Bắt đầu chu kỳ chụp ảnh và OCR (Mỗi 1.5 giây chụp 1 lần để máy POS không bị treo)
+                mrzInterval = setInterval(captureAndRecognizeMRZ, 1500);
+            } catch (err) {
+                showLoading(false);
+                logMsg("Lỗi mở camera: " + err, true);
+            }
+        }
+
+        async function captureAndRecognizeMRZ() {
+            if (!isScanning) return;
+
+            const video = ui.mrzVideo;
+            const canvas = document.getElementById('mrz-canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Tính toán tọa độ để chỉ CẮT phần hình ảnh trong khung MRZ Overlay
+            // Điều này giảm 80% khối lượng tính toán cho Tesseract
+            const cropHeight = video.videoHeight * 0.25; // 25% chiều cao video (tương ứng với overlay)
+            const cropY = video.videoHeight * 0.75;      // Bắt đầu từ đoạn 75% chiều cao
+            const cropWidth = video.videoWidth * 0.9;
+            const cropX = video.videoWidth * 0.05;
+
+            canvas.width = cropWidth;
+            canvas.height = cropHeight;
+            
+            // Vẽ phần cắt lên canvas
+            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            
+            // Xử lý ảnh: Chuyển sang trắng đen, tăng độ tương phản để AI đọc dễ hơn (Image Processing cơ bản)
+            let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let d = imgData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                let brightness = (d[i] * 0.299) + (d[i+1] * 0.587) + (d[i+2] * 0.114);
+                let val = brightness > 128 ? 255 : 0; // Threshold
+                d[i] = d[i+1] = d[i+2] = val;
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            ui.loadingText.textContent = "AI đang đọc chữ...";
+            ui.loading.style.display = 'block';
+
+            try {
+                // Nhận diện chữ
+                const { data: { text } } = await ocrWorker.recognize(canvas);
+                
+                // Phân tích văn bản thành chuẩn MRZ
+                if (parseMRZText(text)) {
+                    // Đọc thành công
+                    if (navigator.vibrate) navigator.vibrate(300);
+                    stopCurrentScan();
+                }
+            } catch (e) {
+                console.error("Lỗi OCR:", e);
+            } finally {
+                if (isScanning) ui.loading.style.display = 'none';
+            }
+        }
+
+        // Hàm trích xuất dữ liệu từ chuỗi MRZ lộn xộn
+        function parseMRZText(text) {
+            // Lọc ra các dòng có chứa nhiều ký tự MRZ hợp lệ và dấu <
+            const lines = text.split('\n').map(l => l.replace(/\s/g, '').toUpperCase());
+            
+            // Tìm dòng bắt đầu bằng P (Passport) và có độ dài quanh 44
+            let line1 = lines.find(l => l.startsWith('P') && l.length >= 40 && l.length <= 46 && l.includes('<'));
+            // Tìm dòng thứ 2 (chứa số hộ chiếu, ngày sinh, thường toàn số và chữ)
+            let line2 = lines.find(l => l !== line1 && l.length >= 40 && l.length <= 46 && /[0-9]/.test(l) && l.includes('<'));
+
+            ui.log.innerHTML = `Đang phân tích OCR...<br><span class="text-gray-400 opacity-50">${text.substring(0, 100)}...</span>`;
+
+            if (line1 && line2) {
+                // Chuẩn hóa độ dài về 44 (loại bỏ ký tự rác nếu có)
+                line1 = line1.substring(0, 44);
+                line2 = line2.substring(0, 44);
+
+                try {
+                    // Trích xuất theo chuẩn ICAO Document 9303 (TD3 format)
+                    const nation = line1.substring(2, 5).replace(/</g, '');
+                    const nameParts = line1.substring(5).split('<<');
+                    const surName = nameParts[0].replace(/</g, ' ');
+                    const givenName = nameParts[1] ? nameParts[1].replace(/</g, ' ') : '';
+                    
+                    const passportNo = line2.substring(0, 9).replace(/</g, '');
+                    const nationality = line2.substring(10, 13).replace(/</g, '');
+                    const dobRaw = line2.substring(13, 19); // YYMMDD
+                    const gender = line2.substring(20, 21);
+                    const expireRaw = line2.substring(21, 27); // YYMMDD
+
+                    // Format ngày sinh (quy ước thế kỷ)
+                    let dobYear = parseInt(dobRaw.substring(0,2));
+                    dobYear += (dobYear > 30) ? 1900 : 2000;
+                    const dob = `${dobRaw.substring(4,6)}/${dobRaw.substring(2,4)}/${dobYear}`;
+
+                    // Format ngày hết hạn
+                    let expYear = 2000 + parseInt(expireRaw.substring(0,2));
+                    const expire = `${expireRaw.substring(4,6)}/${expireRaw.substring(2,4)}/${expYear}`;
+
+                    // Hiển thị UI
+                    ui.resQr.classList.add('hidden');
+                    ui.resMrz.classList.remove('hidden');
+                    ui.btnClear.classList.remove('hidden');
+
+                    document.getElementById('m-passport').textContent = passportNo;
+                    document.getElementById('m-name').textContent = `${surName} ${givenName}`.trim();
+                    document.getElementById('m-nation').textContent = nationality || nation;
+                    document.getElementById('m-dob').textContent = dob;
+                    document.getElementById('m-gender').textContent = gender === 'M' ? 'Nam' : (gender === 'F' ? 'Nữ' : 'Khác');
+                    document.getElementById('m-expire').textContent = expire;
+
+                    logMsg(`Quét Hộ chiếu thành công!<br>Dữ liệu gốc MRZ:<br>${line1}<br>${line2}`);
+                    return true;
+                } catch (e) {
+                    console.log("Sai định dạng parse MRZ", e);
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        function startCurrentScan() {
+            clearResults();
+            if (currentMode === 'QR') {
+                startQRScan();
+            } else {
+                startMRZScan();
+            }
+        }
+
+        async function stopCurrentScan() {
+            if (!isScanning) return;
+            
+            showLoading(false);
+            if (currentMode === 'QR' && html5QrCode) {
+                try {
+                    await html5QrCode.stop();
+                } catch (e) {}
+            } else if (currentMode === 'MRZ') {
+                clearInterval(mrzInterval);
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                }
+            }
+            toggleActionBtn(false);
+        }
+
+        function clearResults() {
+            ui.resQr.classList.add('hidden');
+            ui.resMrz.classList.add('hidden');
+            ui.btnClear.classList.add('hidden');
+            
+            // Xóa text QR
+            ['r-cccd', 'r-name', 'r-dob', 'r-gender', 'r-address'].forEach(id => document.getElementById(id).textContent = '');
+            // Xóa text MRZ
+            ['m-passport', 'm-name', 'm-nation', 'm-dob', 'm-gender', 'm-expire'].forEach(id => document.getElementById(id).textContent = '');
+        }
+
     </script>
 </body>
 </html>
