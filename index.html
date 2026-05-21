@@ -2,395 +2,412 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <!-- Cấu hình viewport chuẩn cho ứng dụng di động/POS -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>POS Scanner - CCCD & MRZ</title>
+    <title>POS Scanner - CCCD & MRZ (Snapshot)</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Thư viện quét QR -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    
-    <!-- Thư viện OCR (Nhận diện chữ cái) cho MRZ -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <style>
-        /* Tùy chỉnh UI */
         body { -webkit-tap-highlight-color: transparent; }
         .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: bold; }
         .tab-inactive { color: #6b7280; }
         
-        /* Container Camera */
-        .camera-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 250px;}
-        #qr-reader, #mrz-video { width: 100%; height: 100%; object-fit: cover; }
-        
-        /* Khung định vị MRZ */
-        #mrz-overlay {
-            position: absolute;
-            bottom: 10%;
-            left: 5%;
-            width: 90%;
-            height: 25%;
-            border: 2px solid rgba(255, 255, 255, 0.7);
-            border-radius: 4px;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Làm tối xung quanh */
-            z-index: 10;
-            display: none;
-            pointer-events: none;
+        .camera-container { 
+            position: relative; width: 100%; border-radius: 8px; 
+            overflow: hidden; background: #111; min-height: 280px; 
+            display: flex; align-items: center; justify-content: center;
         }
-        #mrz-overlay::after {
-            content: "Căn 2 dòng MRZ vào khung này";
+        #qr-reader { width: 100%; height: 100%; }
+        #mrz-video { width: 100%; height: 100%; object-fit: cover; }
+        #snapshot-canvas { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; display: none; z-index: 5; }
+        
+        /* Khung định vị MRZ chuyên nghiệp */
+        .mrz-guide {
             position: absolute;
-            top: -25px;
-            left: 0;
-            width: 100%;
+            bottom: 15%;
+            width: 90%;
+            height: 30%;
+            border: 2px dashed #4ade80; /* Màu xanh lá nhạt */
+            border-radius: 8px;
+            z-index: 10;
+            box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .mrz-guide-text {
+            color: #4ade80;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
             text-align: center;
-            color: white;
-            font-size: 12px;
-            text-shadow: 1px 1px 2px black;
+            background: rgba(0,0,0,0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans antialiased flex flex-col h-screen overflow-hidden">
+<body class="bg-gray-100 text-gray-800 font-sans flex flex-col h-screen overflow-hidden">
 
-    <!-- Header -->
     <header class="bg-white shadow-sm z-20">
         <div class="bg-blue-600 text-white p-3 text-center">
-            <h1 class="text-lg font-bold">Smart POS Scanner</h1>
+            <h1 class="text-lg font-bold">POS Scanner Pro</h1>
         </div>
-        <!-- Tabs -->
         <div class="flex justify-between border-b bg-white">
-            <button id="tab-qr" class="flex-1 py-3 tab-active text-sm uppercase tracking-wide transition">Quét CCCD/VNeID</button>
-            <button id="tab-mrz" class="flex-1 py-3 tab-inactive text-sm uppercase tracking-wide transition border-l">Quét Hộ Chiếu</button>
+            <button id="tab-qr" class="flex-1 py-3 tab-active text-sm uppercase tracking-wide">Quét CCCD/VNeID</button>
+            <button id="tab-mrz" class="flex-1 py-3 tab-inactive text-sm uppercase tracking-wide border-l">Quét Hộ Chiếu</button>
         </div>
     </header>
 
-    <!-- Main Content -->
     <main class="flex-grow p-4 flex flex-col overflow-y-auto">
-        
-        <!-- Khung hiển thị Camera chung -->
-        <div class="w-full bg-white rounded-xl shadow-md p-3 mb-4">
-            <div class="camera-container flex items-center justify-center">
-                <!-- Vùng cho QR -->
-                <div id="qr-reader" class="w-full h-full absolute inset-0"></div>
+        <div class="w-full bg-white rounded-xl shadow-md p-3 mb-4 relative">
+            <div class="camera-container" id="camera-box">
+                <!-- QR Mode -->
+                <div id="qr-reader" class="absolute inset-0"></div>
                 
-                <!-- Vùng cho MRZ -->
+                <!-- MRZ Mode -->
                 <video id="mrz-video" class="absolute inset-0 hidden" autoplay playsinline></video>
-                <div id="mrz-overlay"></div>
+                <canvas id="snapshot-canvas"></canvas> <!-- Hiển thị ảnh vừa chụp -->
                 
-                <!-- Hiệu ứng tải/Loading -->
-                <div id="loading-indicator" class="absolute z-30 text-white text-sm text-center px-4 hidden">
-                    <svg class="animate-spin h-8 w-8 text-white mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <div id="mrz-overlay" class="mrz-guide hidden">
+                    <span class="mrz-guide-text">Căn 2 dòng chữ MRZ vào đây<br>rồi bấm CHỤP ẢNH</span>
+                </div>
+
+                <!-- Overlay Loading -->
+                <div id="loading-indicator" class="absolute inset-0 bg-black bg-opacity-70 z-30 flex flex-col items-center justify-center hidden">
+                    <svg class="animate-spin h-10 w-10 text-blue-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span id="loading-text">Đang chuẩn bị Camera...</span>
+                    <span id="loading-text" class="text-white font-bold text-center px-4">Đang xử lý AI OCR...</span>
                 </div>
             </div>
 
             <!-- Nút điều khiển -->
-            <div class="mt-4">
-                <button id="btn-action" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition">
-                    Bắt đầu Quét QR
+            <div class="mt-4 flex gap-2">
+                <button id="btn-action" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition">
+                    Bắt đầu Mở Camera
+                </button>
+                <button id="btn-snapshot" class="hidden flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition">
+                    📸 Chụp & Phân tích
                 </button>
             </div>
         </div>
 
-        <!-- Canvas ẩn dùng để xử lý ảnh cắt MRZ trước khi OCR -->
-        <canvas id="mrz-canvas" class="hidden"></canvas>
+        <!-- Canvas dùng để xử lý ảnh ngầm (trước khi cho AI đọc) -->
+        <canvas id="process-canvas" class="hidden"></canvas>
 
-        <!-- Khu vực hiển thị kết quả -->
-        <div class="w-full bg-white rounded-xl shadow-md p-4 flex-grow mb-4">
+        <div class="w-full bg-white rounded-xl shadow-md p-4 flex-grow mb-4 flex flex-col">
             <div class="flex justify-between items-center border-b pb-2 mb-3">
-                <h2 class="text-md font-bold text-gray-700">Dữ liệu trích xuất:</h2>
-                <button id="btn-clear" class="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600 hidden">Xóa</button>
+                <h2 class="text-md font-bold text-gray-700">Trạng thái / Kết quả:</h2>
+                <button id="btn-clear" class="text-xs bg-gray-200 px-3 py-1 rounded text-gray-700 hover:bg-gray-300 transition hidden">Xóa</button>
             </div>
             
-            <!-- Kết quả QR (CCCD) -->
-            <div id="result-qr" class="text-sm space-y-2 hidden">
-                <p><strong>Số CCCD:</strong> <span id="r-cccd" class="text-blue-600 font-bold"></span></p>
-                <p><strong>Họ và tên:</strong> <span id="r-name" class="uppercase font-bold text-gray-900"></span></p>
-                <p><strong>Ngày sinh:</strong> <span id="r-dob"></span></p>
-                <p><strong>Giới tính:</strong> <span id="r-gender"></span></p>
-                <p><strong>Địa chỉ:</strong> <span id="r-address"></span></p>
+            <!-- Thông báo trạng thái -->
+            <div id="status-box" class="p-3 mb-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm">
+                Sẵn sàng. Hãy chọn chức năng và mở camera.
             </div>
 
-            <!-- Kết quả MRZ (Hộ chiếu) -->
-            <div id="result-mrz" class="text-sm space-y-2 hidden">
-                <p><strong>Số Hộ Chiếu:</strong> <span id="m-passport" class="text-red-600 font-bold text-lg"></span></p>
-                <p><strong>Họ và Tên:</strong> <span id="m-name" class="uppercase font-bold text-gray-900"></span></p>
-                <p><strong>Quốc tịch:</strong> <span id="m-nation"></span></p>
-                <p><strong>Ngày sinh:</strong> <span id="m-dob"></span></p>
-                <p><strong>Giới tính:</strong> <span id="m-gender"></span></p>
-                <p><strong>Ngày hết hạn:</strong> <span id="m-expire"></span></p>
+            <!-- Kết quả Formated -->
+            <div id="result-box" class="text-sm space-y-2 hidden flex-grow">
+                <p><strong>Loại giấy tờ:</strong> <span id="res-type" class="text-blue-600 font-bold uppercase"></span></p>
+                <p><strong>Số/ID:</strong> <span id="res-id" class="text-red-600 font-bold text-lg"></span></p>
+                <p><strong>Họ và tên:</strong> <span id="res-name" class="uppercase font-bold text-gray-900"></span></p>
+                <p><strong>Ngày sinh:</strong> <span id="res-dob"></span></p>
+                <p><strong>Giới tính:</strong> <span id="res-gender"></span></p>
+                <p><strong>Thông tin khác:</strong> <span id="res-extra"></span></p>
             </div>
 
-            <!-- Dữ liệu thô / Log -->
-            <div class="mt-4 p-2 bg-gray-50 rounded border text-xs text-gray-500 font-mono break-words min-h-[50px]" id="raw-log">
-                Vui lòng bấm nút bắt đầu và đưa giấy tờ vào khung hình...
+            <!-- Dữ liệu thô (Raw) để debug -->
+            <div class="mt-auto pt-3 border-t">
+                <p class="text-xs font-bold text-gray-500 mb-1">Dữ liệu thô thu được (Raw Data):</p>
+                <div id="raw-log" class="p-2 bg-gray-100 rounded border text-xs text-gray-600 font-mono break-words max-h-[80px] overflow-y-auto">
+                    ...
+                </div>
             </div>
         </div>
     </main>
 
     <script>
-        // -- QUẢN LÝ TRẠNG THÁI --
-        let currentMode = 'QR'; // 'QR' hoặc 'MRZ'
-        let isScanning = false;
-        
-        // QR Variables
-        let html5QrCode = null;
-
-        // MRZ Variables
-        let videoStream = null;
-        let mrzInterval = null;
-        let ocrWorker = null;
-        let isOcrReady = false;
-
         // DOM Elements
         const ui = {
             tabQr: document.getElementById('tab-qr'),
             tabMrz: document.getElementById('tab-mrz'),
             btnAction: document.getElementById('btn-action'),
+            btnSnapshot: document.getElementById('btn-snapshot'),
             btnClear: document.getElementById('btn-clear'),
-            qrContainer: document.getElementById('qr-reader'),
+            qrReader: document.getElementById('qr-reader'),
             mrzVideo: document.getElementById('mrz-video'),
             mrzOverlay: document.getElementById('mrz-overlay'),
+            snapshotCanvas: document.getElementById('snapshot-canvas'),
             loading: document.getElementById('loading-indicator'),
             loadingText: document.getElementById('loading-text'),
-            log: document.getElementById('raw-log'),
-            resQr: document.getElementById('result-qr'),
-            resMrz: document.getElementById('result-mrz')
+            statusBox: document.getElementById('status-box'),
+            resultBox: document.getElementById('result-box'),
+            rawLog: document.getElementById('raw-log')
         };
 
-        // -- LOGIC CHUYỂN TAB --
+        // State
+        let currentMode = 'QR';
+        let isCameraRunning = false;
+        let html5QrCode = null;
+        let videoStream = null;
+        let ocrWorker = null;
+
+        // Chuyển Tab
         ui.tabQr.addEventListener('click', () => switchTab('QR'));
         ui.tabMrz.addEventListener('click', () => switchTab('MRZ'));
 
         async function switchTab(mode) {
-            if (isScanning) await stopCurrentScan();
-            
+            if (isCameraRunning) await stopCamera();
             currentMode = mode;
-            ui.btnAction.textContent = mode === 'QR' ? "Bắt đầu Quét CCCD" : "Bắt đầu Quét Hộ Chiếu";
-            ui.btnAction.classList.remove('bg-red-500', 'hover:bg-red-600');
-            ui.btnAction.classList.add('bg-blue-600', 'hover:bg-blue-700');
-            
-            ui.log.innerHTML = mode === 'QR' ? "Chế độ: Đọc mã vạch 2D siêu tốc." : "Chế độ: AI OCR đọc MRZ. Vui lòng căn đúng khung.";
             clearResults();
 
             if (mode === 'QR') {
-                ui.tabQr.className = "flex-1 py-3 tab-active text-sm uppercase tracking-wide transition";
-                ui.tabMrz.className = "flex-1 py-3 tab-inactive text-sm uppercase tracking-wide transition border-l";
-                ui.qrContainer.style.display = 'block';
+                ui.tabQr.classList.replace('tab-inactive', 'tab-active');
+                ui.tabMrz.classList.replace('tab-active', 'tab-inactive');
+                ui.btnAction.textContent = "Mở Camera Quét CCCD/VNeID";
+                ui.btnSnapshot.classList.add('hidden');
+                ui.qrReader.style.display = 'block';
                 ui.mrzVideo.classList.add('hidden');
-                ui.mrzOverlay.style.display = 'none';
+                ui.mrzOverlay.classList.add('hidden');
+                ui.snapshotCanvas.style.display = 'none';
+                updateStatus("Chế độ quét mã vạch 2D. Đưa mã QR vào khung hình.", "blue");
             } else {
-                ui.tabMrz.className = "flex-1 py-3 tab-active text-sm uppercase tracking-wide transition border-l";
-                ui.tabQr.className = "flex-1 py-3 tab-inactive text-sm uppercase tracking-wide transition";
-                ui.qrContainer.style.display = 'none';
+                ui.tabMrz.classList.replace('tab-inactive', 'tab-active');
+                ui.tabQr.classList.replace('tab-active', 'tab-inactive');
+                ui.btnAction.textContent = "Mở Camera Hộ Chiếu";
+                ui.btnAction.classList.remove('hidden');
+                ui.qrReader.style.display = 'none';
                 ui.mrzVideo.classList.remove('hidden');
-                ui.mrzOverlay.style.display = 'block';
-                // Khởi tạo Tesseract nếu chưa có
-                initTesseract();
+                ui.mrzOverlay.classList.remove('hidden');
+                ui.snapshotCanvas.style.display = 'none';
+                updateStatus("Căn dòng chữ MRZ vào khung xanh rồi bấm Chụp ảnh.", "blue");
+                initTesseract(); // Tải AI trước
             }
         }
 
-        // -- NÚT ĐIỀU KHIỂN CHÍNH --
+        // Action Button Handler (Mở/Tắt Camera)
         ui.btnAction.addEventListener('click', async () => {
-            if (isScanning) {
-                await stopCurrentScan();
+            if (isCameraRunning) {
+                await stopCamera();
             } else {
-                startCurrentScan();
+                await startCamera();
             }
         });
 
         ui.btnClear.addEventListener('click', clearResults);
 
-        function toggleActionBtn(scanning) {
-            isScanning = scanning;
-            if (scanning) {
-                ui.btnAction.textContent = "Dừng Quét";
-                ui.btnAction.classList.replace('bg-blue-600', 'bg-red-500');
-                ui.btnAction.classList.replace('hover:bg-blue-700', 'hover:bg-red-600');
-            } else {
-                ui.btnAction.textContent = currentMode === 'QR' ? "Bắt đầu Quét CCCD" : "Bắt đầu Quét Hộ Chiếu";
-                ui.btnAction.classList.replace('bg-red-500', 'bg-blue-600');
-                ui.btnAction.classList.replace('hover:bg-red-600', 'hover:bg-blue-700');
+        async function startCamera() {
+            clearResults();
+            if (currentMode === 'QR') {
+                try {
+                    if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader");
+                    updateStatus("Đang mở camera QR...", "blue");
+                    
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        (decodedText) => {
+                            if(navigator.vibrate) navigator.vibrate(200);
+                            stopCamera(); // Quét xong tự tắt camera
+                            handleQRSuccess(decodedText);
+                        },
+                        (err) => { /* Lỗi frame rỗng, bỏ qua */ }
+                    );
+                    
+                    isCameraRunning = true;
+                    ui.btnAction.textContent = "Dừng Camera";
+                    ui.btnAction.classList.replace('bg-blue-600', 'bg-red-500');
+                    updateStatus("Đang quét. Hãy đưa mã QR vào khung...", "green");
+                } catch (e) {
+                    updateStatus("Lỗi mở camera QR: " + e, "red");
+                }
+            } 
+            else {
+                if (!ocrWorker) {
+                    alert("AI đang tải, vui lòng đợi vài giây!");
+                    return;
+                }
+                try {
+                    updateStatus("Đang khởi động camera...", "blue");
+                    videoStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'environment', width: { ideal: 1280 } } 
+                    });
+                    ui.mrzVideo.srcObject = videoStream;
+                    ui.mrzVideo.play();
+                    
+                    isCameraRunning = true;
+                    ui.btnAction.classList.add('hidden'); // Ẩn nút Mở camera
+                    ui.btnSnapshot.classList.remove('hidden'); // Hiện nút Chụp
+                    ui.btnSnapshot.textContent = "📸 Chụp & Phân tích";
+                    ui.btnSnapshot.classList.replace('bg-yellow-500', 'bg-green-600');
+                    ui.snapshotCanvas.style.display = 'none';
+                    updateStatus("Hãy căn 2 dòng chữ dưới cùng Hộ chiếu vào khung và bấm nút Chụp.", "green");
+                } catch (e) {
+                    updateStatus("Lỗi mở camera Hộ chiếu: Không có quyền truy cập.", "red");
+                }
             }
         }
 
-        function showLoading(show, text = "Đang xử lý...") {
-            ui.loadingText.textContent = text;
-            ui.loading.style.display = show ? 'block' : 'none';
-        }
-
-        function logMsg(msg, isError = false) {
-            ui.log.innerHTML = `<span class="${isError ? 'text-red-500' : 'text-green-600'}">${msg}</span>`;
-        }
-
-        async function startQRScan() {
-            if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader");
-            
-            showLoading(true, "Đang mở camera QR...");
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            
-            try {
-                // Thêm callback thứ 2 để bỏ qua các lỗi khung hình trống (không có mã QR)
-                await html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    config, 
-                    (decodedText) => {
-                        // Quét thành công
-                        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                        stopCurrentScan();
-                        parseCCCD(decodedText);
-                    },
-                    (errorMessage) => {
-                        // Bỏ qua lỗi ngầm để camera không bị đứng
-                    }
-                );
-                showLoading(false);
-                toggleActionBtn(true);
-                logMsg("Đang tìm mã QR CCCD/VNeID...");
-            } catch (err) {
-                showLoading(false);
-                logMsg("Lỗi Camera QR: " + err + "<br>Thử kiểm tra quyền truy cập Camera.", true);
+        async function stopCamera() {
+            if (currentMode === 'QR' && html5QrCode) {
+                try { await html5QrCode.stop(); } catch(e){}
+            } else if (currentMode === 'MRZ' && videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                ui.mrzVideo.pause();
             }
+            isCameraRunning = false;
+            ui.btnAction.textContent = currentMode === 'QR' ? "Mở Camera Quét CCCD" : "Mở Camera Hộ Chiếu";
+            ui.btnAction.classList.remove('hidden');
+            ui.btnAction.classList.replace('bg-red-500', 'bg-blue-600');
+            ui.btnSnapshot.classList.add('hidden');
         }
 
-        function parseCCCD(qrText) {
-            const parts = qrText.split('|');
-            ui.resMrz.classList.add('hidden');
-            ui.resQr.classList.remove('hidden');
+        function handleQRSuccess(qrText) {
+            ui.rawLog.textContent = qrText;
             ui.btnClear.classList.remove('hidden');
+            ui.resultBox.classList.remove('hidden');
 
+            // Phân tích định dạng CCCD Việt Nam (ngăn cách bởi dấu |)
+            // Ví dụ: 001099123456|123456789|NGUYEN VAN A|01011999|Nam|Hà Nội|01012021
+            const parts = qrText.split('|');
+            
             if (parts.length >= 6) {
-                document.getElementById('r-cccd').textContent = parts[0];
-                document.getElementById('r-name').textContent = parts[2];
-                // Format ngày sinh
-                const dob = parts[3] || "";
-                document.getElementById('r-dob').textContent = dob.length === 8 ? `${dob.slice(0,2)}/${dob.slice(2,4)}/${dob.slice(4,8)}` : dob;
-                document.getElementById('r-gender').textContent = parts[4];
-                document.getElementById('r-address').textContent = parts[5];
+                updateStatus("✅ Đã quét thành công mã CCCD/VNeID!", "green");
+                document.getElementById('res-type').textContent = "CCCD / VNeID";
+                document.getElementById('res-id').textContent = parts[0];
+                document.getElementById('res-name').textContent = parts[2];
                 
-                logMsg(`<span class="text-green-600 font-bold text-base">✅ Quét CCCD thành công!</span>`);
+                // Format ngày sinh ddmmyyyy -> dd/mm/yyyy
+                let dob = parts[3] || "";
+                if(dob.length === 8) dob = `${dob.slice(0,2)}/${dob.slice(2,4)}/${dob.slice(4,8)}`;
+                
+                document.getElementById('res-dob').textContent = dob;
+                document.getElementById('res-gender').textContent = parts[4];
+                document.getElementById('res-extra').textContent = parts[5]; // Địa chỉ
             } else {
-                logMsg(`⚠️ Đã quét QR, nhưng không phải CCCD.<br><span class="text-gray-500 break-all">${qrText}</span>`);
+                // Quét được QR nhưng không đúng chuẩn CCCD
+                updateStatus("⚠️ Đã quét được QR, nhưng đây không phải định dạng CCCD chuẩn.", "yellow");
+                document.getElementById('res-type').textContent = "MÃ QR KHÁC";
+                document.getElementById('res-id').textContent = "Không xác định";
+                document.getElementById('res-name').textContent = "N/A";
+                document.getElementById('res-extra').textContent = "Vui lòng xem dữ liệu thô (Raw) bên dưới.";
             }
         }
 
         async function initTesseract() {
-            if (isOcrReady || ocrWorker != null) return;
-            showLoading(true, "Đang tải Engine AI (Tesseract)...");
-            logMsg("Đang tải dữ liệu mô hình OCR, vui lòng đợi...");
-            
+            if (ocrWorker) return;
+            updateStatus("Đang tải AI OCR...", "blue");
             try {
                 ocrWorker = await Tesseract.createWorker('eng');
                 await ocrWorker.setParameters({
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', // MRZ chỉ có những ký tự này
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', // Chỉ cho phép ký tự MRZ
                 });
-                isOcrReady = true;
-                showLoading(false);
-                logMsg("Engine AI đã sẵn sàng!");
+                updateStatus("AI OCR đã sẵn sàng. Hãy mở camera.", "green");
             } catch (error) {
-                showLoading(false);
-                logMsg("Lỗi khởi tạo AI OCR: " + error.message, true);
+                updateStatus("Lỗi khởi tạo AI: " + error.message, "red");
             }
         }
 
-        async function startMRZScan() {
-            if (!isOcrReady) {
-                alert("Hệ thống AI chưa tải xong, vui lòng đợi vài giây!");
+        ui.btnSnapshot.addEventListener('click', async () => {
+            if (!isCameraRunning) {
+                // Nếu camera đang tắt (đang ở trạng thái Chụp lại), thì mở lại camera
+                ui.snapshotCanvas.style.display = 'none';
+                await startCamera();
                 return;
             }
-            showLoading(true, "Đang mở camera...");
-            try {
-                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
-                ui.mrzVideo.srcObject = videoStream;
-                ui.mrzVideo.play();
-                showLoading(false);
-                toggleActionBtn(true);
-                logMsg("Hãy đưa 2 dòng MRZ dưới cùng Hộ chiếu vào sát khung chữ nhật...");
-                
-                // Bắt đầu chu kỳ chụp ảnh và OCR (Mỗi 1.5 giây chụp 1 lần để máy POS không bị treo)
-                mrzInterval = setInterval(captureAndRecognizeMRZ, 1500);
-            } catch (err) {
-                showLoading(false);
-                logMsg("Lỗi mở camera: " + err, true);
-            }
-        }
 
-        async function captureAndRecognizeMRZ() {
-            if (!isScanning) return;
-
+            if(navigator.vibrate) navigator.vibrate(50);
+            
+            // 1. Dừng camera (Đóng băng khung hình)
+            isCameraRunning = false;
+            ui.btnSnapshot.textContent = "Đang xử lý...";
+            ui.btnSnapshot.classList.replace('bg-green-600', 'bg-gray-500');
+            
+            // 2. Chụp khung hình hiện tại lên view Canvas (Để user xem)
             const video = ui.mrzVideo;
-            const canvas = document.getElementById('mrz-canvas');
-            const ctx = canvas.getContext('2d');
-
-            // Tính toán tọa độ để chỉ CẮT phần hình ảnh trong khung MRZ Overlay
-            // Điều này giảm 80% khối lượng tính toán cho Tesseract
-            const cropHeight = video.videoHeight * 0.25; // 25% chiều cao video (tương ứng với overlay)
-            const cropY = video.videoHeight * 0.75;      // Bắt đầu từ đoạn 75% chiều cao
-            const cropWidth = video.videoWidth * 0.9;
-            const cropX = video.videoWidth * 0.05;
-
-            canvas.width = cropWidth;
-            canvas.height = cropHeight;
+            const snapCanvas = ui.snapshotCanvas;
+            const snapCtx = snapCanvas.getContext('2d');
+            snapCanvas.width = video.videoWidth;
+            snapCanvas.height = video.videoHeight;
+            snapCtx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
             
-            // Vẽ phần cắt lên canvas
-            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            snapCanvas.style.display = 'block'; // Hiện ảnh chụp
             
-            // Xử lý ảnh: Chỉ chuyển sang trắng đen (Grayscale), bỏ tính năng Threshold cứng để giữ chi tiết chữ
-            let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            // Tắt stream camera gốc đi cho tiết kiệm bộ nhớ
+            if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+
+            // 3. Tiền xử lý ảnh (Cắt vùng MRZ để đưa cho AI)
+            showLoading(true, "AI đang đọc hình ảnh...");
+            
+            const procCanvas = document.getElementById('process-canvas');
+            const procCtx = procCanvas.getContext('2d');
+            
+            // Khung guide của chúng ta nằm ở 15% dưới cùng, cao 30%. Ta cắt dư ra một chút.
+            const cropY = video.videoHeight * 0.60; 
+            const cropHeight = video.videoHeight * 0.40;
+            procCanvas.width = video.videoWidth;
+            procCanvas.height = cropHeight;
+            
+            // Chỉ cắt phần nửa dưới đưa vào procCanvas
+            procCtx.drawImage(snapCanvas, 0, cropY, video.videoWidth, cropHeight, 0, 0, procCanvas.width, procCanvas.height);
+
+            // Chuyển sang trắng đen cơ bản để AI đọc tốt hơn
+            let imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
             let d = imgData.data;
             for (let i = 0; i < d.length; i += 4) {
-                let brightness = (d[i] * 0.299) + (d[i+1] * 0.587) + (d[i+2] * 0.114);
-                d[i] = d[i+1] = d[i+2] = brightness;
+                let r = d[i], g = d[i+1], b = d[i+2];
+                let v = 0.2126*r + 0.7152*g + 0.0722*b; // Độ sáng
+                d[i] = d[i+1] = d[i+2] = v;
             }
-            ctx.putImageData(imgData, 0, 0);
+            procCtx.putImageData(imgData, 0, 0);
 
-            ui.loadingText.textContent = "AI đang đọc chữ...";
-            ui.loading.style.display = 'block';
-
+            // 4. Chạy AI đọc văn bản từ ảnh đã cắt
             try {
-                // Nhận diện chữ
-                const { data: { text } } = await ocrWorker.recognize(canvas);
+                const { data: { text } } = await ocrWorker.recognize(procCanvas);
                 
-                // Phân tích văn bản thành chuẩn MRZ
+                showLoading(false);
+                ui.rawLog.innerHTML = text.replace(/\n/g, '<br>');
+                
+                // 5. Phân tích kết quả
                 if (parseMRZText(text)) {
-                    // Đọc thành công
-                    if (navigator.vibrate) navigator.vibrate(300);
-                    stopCurrentScan();
+                    updateStatus("✅ Trích xuất Hộ chiếu thành công!", "green");
+                    ui.btnAction.classList.remove('hidden'); // Trả lại nút mở cam
+                    ui.btnSnapshot.classList.add('hidden');
+                } else {
+                    updateStatus("❌ Không tìm thấy mã MRZ chuẩn. Hãy chụp lại.", "red");
+                    // Chuyển nút chụp thành nút "Chụp lại"
+                    ui.btnSnapshot.textContent = "🔄 Chụp lại";
+                    ui.btnSnapshot.classList.replace('bg-gray-500', 'bg-yellow-500');
                 }
-            } catch (e) {
-                console.error("Lỗi OCR:", e);
-            } finally {
-                if (isScanning) ui.loading.style.display = 'none';
+            } catch (err) {
+                showLoading(false);
+                updateStatus("Lỗi AI xử lý ảnh.", "red");
             }
-        }
+        });
 
-        // Hàm trích xuất dữ liệu từ chuỗi MRZ lộn xộn
         function parseMRZText(text) {
-            // In trực tiếp dữ liệu thô AI đọc được ra màn hình để bạn debug xem camera có bắt nét được không
-            ui.log.innerHTML = `<strong class="text-blue-600">AI đang nhìn thấy:</strong><br><span class="text-gray-500 text-[10px] font-mono leading-tight uppercase block max-h-20 overflow-y-auto">${text.replace(/\n/g, '<br>')}</span>`;
-
-            // Lọc ra các dòng có chứa nhiều ký tự MRZ hợp lệ và dấu <
+            // Lọc ra các dòng dài và có dấu <
             const lines = text.split('\n').map(l => l.replace(/\s/g, '').toUpperCase());
             
-            // Tìm dòng bắt đầu bằng P (Passport) (nới lỏng độ dài > 35 ký tự thay vì ép buộc 44)
+            // Hộ chiếu thường có 2 dòng (bắt đầu bằng P, độ dài >= 40)
             let line1 = lines.find(l => l.startsWith('P') && l.length > 35);
-            // Tìm dòng thứ 2 (chứa số, khác dòng 1)
             let line2 = lines.find(l => l !== line1 && l.length > 35 && /[0-9]/.test(l));
 
             if (line1 && line2) {
-                // Sửa các lỗi OCR phổ biến: AI hay đọc dấu < thành chữ C, K hoặc ngoặc. 
-                // Cắt và độn chuỗi cho đủ 44 ký tự chuẩn ICAO.
+                // Chuẩn hóa lỗi OCR (AI hay nhìn dấu < thành C, K, ngoặc...)
                 line1 = line1.replace(/[CK\(\)\[\]\«\>]/g, '<').padEnd(44, '<').substring(0, 44);
                 line2 = line2.replace(/[CK\(\)\[\]\«\>]/g, '<').padEnd(44, '<').substring(0, 44);
 
                 try {
-                    // Trích xuất theo chuẩn ICAO Document 9303 (TD3 format)
-                    const nation = line1.substring(2, 5).replace(/</g, '');
+                    ui.resultBox.classList.remove('hidden');
+                    ui.btnClear.classList.remove('hidden');
+
                     const nameParts = line1.substring(5).split('<<');
                     const surName = nameParts[0].replace(/</g, ' ');
                     const givenName = nameParts[1] ? nameParts[1].replace(/</g, ' ') : '';
@@ -399,76 +416,50 @@
                     const nationality = line2.substring(10, 13).replace(/</g, '');
                     const dobRaw = line2.substring(13, 19); // YYMMDD
                     const gender = line2.substring(20, 21);
-                    const expireRaw = line2.substring(21, 27); // YYMMDD
 
-                    // Format ngày sinh (quy ước thế kỷ)
-                    let dobYear = parseInt(dobRaw.substring(0,2));
-                    dobYear += (dobYear > 30) ? 1900 : 2000;
-                    const dob = `${dobRaw.substring(4,6)}/${dobRaw.substring(2,4)}/${dobYear}`;
+                    document.getElementById('res-type').textContent = "Hộ Chiếu (Passport)";
+                    document.getElementById('res-id').textContent = passportNo;
+                    document.getElementById('res-name').textContent = `${surName} ${givenName}`.trim();
+                    
+                    // Dob format
+                    let dYear = parseInt(dobRaw.substring(0,2));
+                    dYear += (dYear > 30) ? 1900 : 2000;
+                    document.getElementById('res-dob').textContent = `${dobRaw.substring(4,6)}/${dobRaw.substring(2,4)}/${dYear}`;
+                    
+                    document.getElementById('res-gender').textContent = gender === 'M' ? 'Nam' : (gender === 'F' ? 'Nữ' : 'Khác');
+                    document.getElementById('res-extra').textContent = `Quốc tịch: ${nationality}`;
 
-                    // Format ngày hết hạn
-                    let expYear = 2000 + parseInt(expireRaw.substring(0,2));
-                    const expire = `${expireRaw.substring(4,6)}/${expireRaw.substring(2,4)}/${expYear}`;
-
-                    // Hiển thị UI
-                    ui.resQr.classList.add('hidden');
-                    ui.resMrz.classList.remove('hidden');
-                    ui.btnClear.classList.remove('hidden');
-
-                    document.getElementById('m-passport').textContent = passportNo;
-                    document.getElementById('m-name').textContent = `${surName} ${givenName}`.trim();
-                    document.getElementById('m-nation').textContent = nationality || nation;
-                    document.getElementById('m-dob').textContent = dob;
-                    document.getElementById('m-gender').textContent = gender === 'M' ? 'Nam' : (gender === 'F' ? 'Nữ' : 'Khác');
-                    document.getElementById('m-expire').textContent = expire;
-
-                    logMsg(`<span class="text-green-600 font-bold text-base">✅ Quét Hộ chiếu thành công!</span><br><span class="text-xs text-gray-500">MRZ:<br>${line1}<br>${line2}</span>`);
                     return true;
                 } catch (e) {
-                    console.log("Sai định dạng parse MRZ", e);
-                    return false;
+                    return false; // Phân tích lỗi
                 }
             }
-            return false;
+            return false; // Không tìm đủ 2 dòng
         }
 
-        function startCurrentScan() {
-            clearResults();
-            if (currentMode === 'QR') {
-                startQRScan();
-            } else {
-                startMRZScan();
-            }
+        function showLoading(show, text) {
+            ui.loadingText.textContent = text;
+            ui.loading.classList.toggle('hidden', !show);
         }
 
-        async function stopCurrentScan() {
-            if (!isScanning) return;
-            
-            showLoading(false);
-            if (currentMode === 'QR' && html5QrCode) {
-                try {
-                    await html5QrCode.stop();
-                } catch (e) {}
-            } else if (currentMode === 'MRZ') {
-                clearInterval(mrzInterval);
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                }
-            }
-            toggleActionBtn(false);
+        function updateStatus(msg, color) {
+            ui.statusBox.textContent = msg;
+            ui.statusBox.className = `p-3 mb-3 border rounded-lg text-sm font-medium ${
+                color === 'red' ? 'bg-red-50 text-red-700 border-red-200' : 
+                color === 'green' ? 'bg-green-50 text-green-700 border-green-200' : 
+                color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 
+                'bg-blue-50 text-blue-700 border-blue-200'
+            }`;
         }
 
         function clearResults() {
-            ui.resQr.classList.add('hidden');
-            ui.resMrz.classList.add('hidden');
+            ui.resultBox.classList.add('hidden');
             ui.btnClear.classList.add('hidden');
-            
-            // Xóa text QR
-            ['r-cccd', 'r-name', 'r-dob', 'r-gender', 'r-address'].forEach(id => document.getElementById(id).textContent = '');
-            // Xóa text MRZ
-            ['m-passport', 'm-name', 'm-nation', 'm-dob', 'm-gender', 'm-expire'].forEach(id => document.getElementById(id).textContent = '');
+            ui.rawLog.innerHTML = "...";
+            ['res-type', 'res-id', 'res-name', 'res-dob', 'res-gender', 'res-extra'].forEach(id => {
+                document.getElementById(id).textContent = '';
+            });
         }
-
     </script>
 </body>
 </html>
