@@ -235,18 +235,26 @@
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
             try {
-                await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                    // Quét thành công
-                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                    stopCurrentScan();
-                    parseCCCD(decodedText);
-                });
+                // Thêm callback thứ 2 để bỏ qua các lỗi khung hình trống (không có mã QR)
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    (decodedText) => {
+                        // Quét thành công
+                        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                        stopCurrentScan();
+                        parseCCCD(decodedText);
+                    },
+                    (errorMessage) => {
+                        // Bỏ qua lỗi ngầm để camera không bị đứng
+                    }
+                );
                 showLoading(false);
                 toggleActionBtn(true);
                 logMsg("Đang tìm mã QR CCCD/VNeID...");
             } catch (err) {
                 showLoading(false);
-                logMsg("Lỗi Camera: " + err, true);
+                logMsg("Lỗi Camera QR: " + err + "<br>Thử kiểm tra quyền truy cập Camera.", true);
             }
         }
 
@@ -260,13 +268,14 @@
                 document.getElementById('r-cccd').textContent = parts[0];
                 document.getElementById('r-name').textContent = parts[2];
                 // Format ngày sinh
-                const dob = parts[3];
+                const dob = parts[3] || "";
                 document.getElementById('r-dob').textContent = dob.length === 8 ? `${dob.slice(0,2)}/${dob.slice(2,4)}/${dob.slice(4,8)}` : dob;
                 document.getElementById('r-gender').textContent = parts[4];
                 document.getElementById('r-address').textContent = parts[5];
-                logMsg("Đã trích xuất dữ liệu CCCD thành công.");
+                
+                logMsg(`<span class="text-green-600 font-bold text-base">✅ Quét CCCD thành công!</span>`);
             } else {
-                logMsg("Đã quét QR, nhưng không phải định dạng CCCD chuẩn.<br>Nội dung: " + qrText);
+                logMsg(`⚠️ Đã quét QR, nhưng không phải CCCD.<br><span class="text-gray-500 break-all">${qrText}</span>`);
             }
         }
 
@@ -331,13 +340,12 @@
             // Vẽ phần cắt lên canvas
             ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
             
-            // Xử lý ảnh: Chuyển sang trắng đen, tăng độ tương phản để AI đọc dễ hơn (Image Processing cơ bản)
+            // Xử lý ảnh: Chỉ chuyển sang trắng đen (Grayscale), bỏ tính năng Threshold cứng để giữ chi tiết chữ
             let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             let d = imgData.data;
             for (let i = 0; i < d.length; i += 4) {
                 let brightness = (d[i] * 0.299) + (d[i+1] * 0.587) + (d[i+2] * 0.114);
-                let val = brightness > 128 ? 255 : 0; // Threshold
-                d[i] = d[i+1] = d[i+2] = val;
+                d[i] = d[i+1] = d[i+2] = brightness;
             }
             ctx.putImageData(imgData, 0, 0);
 
@@ -363,20 +371,22 @@
 
         // Hàm trích xuất dữ liệu từ chuỗi MRZ lộn xộn
         function parseMRZText(text) {
+            // In trực tiếp dữ liệu thô AI đọc được ra màn hình để bạn debug xem camera có bắt nét được không
+            ui.log.innerHTML = `<strong class="text-blue-600">AI đang nhìn thấy:</strong><br><span class="text-gray-500 text-[10px] font-mono leading-tight uppercase block max-h-20 overflow-y-auto">${text.replace(/\n/g, '<br>')}</span>`;
+
             // Lọc ra các dòng có chứa nhiều ký tự MRZ hợp lệ và dấu <
             const lines = text.split('\n').map(l => l.replace(/\s/g, '').toUpperCase());
             
-            // Tìm dòng bắt đầu bằng P (Passport) và có độ dài quanh 44
-            let line1 = lines.find(l => l.startsWith('P') && l.length >= 40 && l.length <= 46 && l.includes('<'));
-            // Tìm dòng thứ 2 (chứa số hộ chiếu, ngày sinh, thường toàn số và chữ)
-            let line2 = lines.find(l => l !== line1 && l.length >= 40 && l.length <= 46 && /[0-9]/.test(l) && l.includes('<'));
-
-            ui.log.innerHTML = `Đang phân tích OCR...<br><span class="text-gray-400 opacity-50">${text.substring(0, 100)}...</span>`;
+            // Tìm dòng bắt đầu bằng P (Passport) (nới lỏng độ dài > 35 ký tự thay vì ép buộc 44)
+            let line1 = lines.find(l => l.startsWith('P') && l.length > 35);
+            // Tìm dòng thứ 2 (chứa số, khác dòng 1)
+            let line2 = lines.find(l => l !== line1 && l.length > 35 && /[0-9]/.test(l));
 
             if (line1 && line2) {
-                // Chuẩn hóa độ dài về 44 (loại bỏ ký tự rác nếu có)
-                line1 = line1.substring(0, 44);
-                line2 = line2.substring(0, 44);
+                // Sửa các lỗi OCR phổ biến: AI hay đọc dấu < thành chữ C, K hoặc ngoặc. 
+                // Cắt và độn chuỗi cho đủ 44 ký tự chuẩn ICAO.
+                line1 = line1.replace(/[CK\(\)\[\]\«\>]/g, '<').padEnd(44, '<').substring(0, 44);
+                line2 = line2.replace(/[CK\(\)\[\]\«\>]/g, '<').padEnd(44, '<').substring(0, 44);
 
                 try {
                     // Trích xuất theo chuẩn ICAO Document 9303 (TD3 format)
@@ -412,7 +422,7 @@
                     document.getElementById('m-gender').textContent = gender === 'M' ? 'Nam' : (gender === 'F' ? 'Nữ' : 'Khác');
                     document.getElementById('m-expire').textContent = expire;
 
-                    logMsg(`Quét Hộ chiếu thành công!<br>Dữ liệu gốc MRZ:<br>${line1}<br>${line2}`);
+                    logMsg(`<span class="text-green-600 font-bold text-base">✅ Quét Hộ chiếu thành công!</span><br><span class="text-xs text-gray-500">MRZ:<br>${line1}<br>${line2}</span>`);
                     return true;
                 } catch (e) {
                     console.log("Sai định dạng parse MRZ", e);
